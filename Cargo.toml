@@ -1,5 +1,5 @@
 [package]
-name = "blockbender"
+name = "mercury"
 version = "0.1.0"
 authors = ["thojest <thojest@gmail.com>"]
 edition = "2018"
@@ -7,15 +7,12 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "libblockbender"
+name = "libmercury"
 path = "src/lib.rs"
 
 [[bin]]
-name = "blockbender"
+name = "mercury"
 path = "src/bin.rs"
 
 
 [dependencies]
-ethane = "0.1.0"
-druid = { git = "https://github.com/linebender/druid"}
-dotenv = "0.15"

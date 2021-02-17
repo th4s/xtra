@@ -1,3 +1,3 @@
-# Blockbender
+# Mercury
 
-Let's see where this goes.
+A local and lightweight indexer for the Ethereum blockchain.
