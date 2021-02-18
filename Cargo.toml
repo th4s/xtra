@@ -16,3 +16,5 @@ path = "src/bin.rs"
 
 
 [dependencies]
+snap = "1"
+byteorder = "1"
