@@ -1,19 +1,28 @@
 use byteorder::{BigEndian, ReadBytesExt};
 use std::fs::File;
 use std::io::{BufReader, Seek, SeekFrom};
-use std::path::Path;
+use std::ops::Range;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 const INDEX_SIZE: usize = 6;
 const CHUNK_SIZE: usize = 2_000_000_000;
 
-pub struct BlockReader {
-    block_type: BlockPart,
-    index: Vec<(u16, u32)>,
+pub struct BlockReader(PathBuf);
+
+impl BlockReader {
+    pub fn read_raw(
+        &self,
+        block_part: BlockPart,
+        block_range: Range<usize>,
+    ) -> Result<Vec<Vec<u8>>, FreezerError> {
+        let index = block_part.read_index(self.0.as_path(), block_range)?;
+        todo!()
+    }
 }
 
 #[derive(Debug)]
-enum BlockPart {
+pub enum BlockPart {
     Bodies,
     Headers,
     Hashes,
@@ -45,19 +54,18 @@ impl BlockPart {
     fn read_index(
         &self,
         chain_folder: &Path,
-        start: usize,
-        end: usize,
+        block_range: Range<usize>,
     ) -> Result<Vec<(u16, u32)>, FreezerError> {
         let index_path = chain_folder.join(self.index_filename());
-        let mut index_file = File::open(index_path).map_err(FreezerError::IndexFileNotFound)?;
+        let index_file = File::open(index_path).map_err(FreezerError::IndexFileNotFound)?;
 
         let mut buffer = BufReader::new(index_file);
         buffer
-            .seek(SeekFrom::Start((INDEX_SIZE * start) as u64))
+            .seek(SeekFrom::Start((INDEX_SIZE * block_range.start) as u64))
             .map_err(FreezerError::Offset)?;
 
-        let mut index: Vec<(u16, u32)> = Vec::with_capacity(end - start);
-        for _ in start..end {
+        let mut index: Vec<(u16, u32)> = Vec::with_capacity(block_range.len());
+        for _ in block_range {
             index.push((
                 buffer
                     .read_u16::<BigEndian>()
