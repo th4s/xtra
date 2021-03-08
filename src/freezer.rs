@@ -1,91 +1,16 @@
 use byteorder::{BigEndian, ReadBytesExt};
-use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
-use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::io::{Read, Seek, SeekFrom};
+use std::path::Path;
 use thiserror::Error;
 
 // A single index consists of 2 bytes (u16) for the file number and 4 bytes (u32) for the offset
-const INDEX_SIZE: usize = 6;
-
-/// Allows to read blockchain data from the geth ancient folder in a convenient way
-pub struct BlockReader {
-    /// The possible range, in which blocks can be read
-    pub block_range: Range<usize>,
-    freezer_folder: PathBuf,
-    block_part: BlockPart,
-    index: (Vec<u16>, Vec<u32>),
-}
-
-impl BlockReader {
-    /// Create a new BlockReader by specifying
-    /// - which part of the blocks you want to read
-    /// - the range of blocks
-    /// - the ancient folder of the chaindata folder
-    pub fn new(
-        block_part: BlockPart,
-        mut block_range: Range<usize>,
-        freezer_folder: PathBuf,
-    ) -> Result<Self, FreezerError> {
-        let index = block_part.read_index(freezer_folder.as_path(), &mut block_range)?;
-        Ok(Self {
-            block_range,
-            freezer_folder,
-            block_part,
-            index,
-        })
-    }
-
-    /// Read a range of blocks.
-    pub fn read_range(&self, block_range: Range<usize>) -> Result<BlockData, FreezerError> {
-        if !self.block_range.contains(&block_range.start)
-            || !self.block_range.contains(&block_range.end)
-        {
-            return Err(FreezerError::OutOfBound);
-        }
-
-        let mut file_handles: HashMap<u16, Result<BufReader<File>, FreezerError>> = HashMap::new();
-        let mut data: Vec<u8> = Vec::with_capacity(block_range.len());
-        let mut borders: Vec<usize> = Vec::with_capacity(block_range.len());
-        let mut last_offset: usize =
-            *self.index.1.get(block_range.start - 1).unwrap_or(&0_u32) as usize;
-
-        for (file_number, offset) in self.index.0[block_range.clone()]
-            .iter()
-            .zip(self.index.1[block_range].iter())
-        {
-            let current_offset = *offset as usize;
-            let current_file = file_handles.entry(*file_number).or_insert_with(|| {
-                Ok(BufReader::new(
-                    File::open(
-                        self.freezer_folder
-                            .join(self.block_part.data_filename(*file_number)),
-                    )
-                    .map_err(FreezerError::DataFileNotFound)?,
-                ))
-            });
-
-            let _read_bytes = current_file
-                .as_mut()
-                .expect("File not present in hashmap. Should be impossible!")
-                .read_exact(&mut data[last_offset..current_offset]);
-
-            borders.push(current_offset - last_offset);
-            last_offset = current_offset
-        }
-
-        Ok(BlockData {
-            data,
-            bounds: borders,
-            block_part: self.block_part,
-        })
-    }
-}
+const FILE_NUMBER_BYTE_SIZE: u64 = 2;
+const OFFSET_NUMBER_BYTE_SIZE: u64 = 4;
 
 /// Specifies which part of a block you want to read
 #[derive(Debug, Clone, Copy)]
-pub enum BlockPart {
+pub enum Freezer {
     Bodies,
     Headers,
     Hashes,
@@ -93,7 +18,45 @@ pub enum BlockPart {
     Receipts,
 }
 
-impl BlockPart {
+impl Freezer {
+    pub fn export(
+        &self,
+        ancient_folder: &Path,
+        (block_offsets, block_data): (&mut Vec<u64>, &mut Vec<u8>),
+        min_block: u64,
+        max_block: u64,
+    ) -> Result<u32, FreezerError> {
+        if min_block >= max_block {
+            return Err(FreezerError::BlockRange);
+        }
+
+        let index_filename = ancient_folder.join(self.index_filename());
+        let mut index_file = File::open(index_filename).map_err(FreezerError::OpenFile)?;
+
+        let (last_file_number, last_offset) =
+            jump_to_block_number_and_read_index(&mut index_file, max_block)?;
+        let (first_file_number, first_offset) =
+            jump_to_block_number_and_read_index(&mut index_file, min_block)?;
+
+        let mut current_file_number = first_file_number;
+        let mut read_bytes: u64 = 0;
+
+        while current_file_number <= last_file_number {
+            let data_file_name = ancient_folder.join(self.data_filename(current_file_number));
+            let mut data_file = File::open(data_file_name).map_err(FreezerError::OpenFile)?;
+            let read_bytes = if current_file_number == first_file_number {
+                seek_and_read(&mut data_file, block_data, first_offset, None)
+            } else if current_file_number == last_file_number {
+                seek_and_read(&mut data_file, block_data, 0, Some(last_offset))
+            } else {
+                seek_and_read(&mut data_file, block_data, 0, None)
+            }?;
+            current_file_number = current_file_number + 1;
+        }
+
+        Ok(0)
+    }
+
     fn index_filename(&self) -> &'static str {
         match *self {
             Self::Bodies => "bodies.cidx",
@@ -113,59 +76,53 @@ impl BlockPart {
             Self::Receipts => format!("receipts.{:04}.cdat", file_number),
         }
     }
+}
 
-    fn read_index(
-        &self,
-        chain_folder: &Path,
-        block_range: &mut Range<usize>,
-    ) -> Result<(Vec<u16>, Vec<u32>), FreezerError> {
-        let index_path = chain_folder.join(self.index_filename());
-        let index_file = File::open(index_path).map_err(FreezerError::IndexFileNotFound)?;
+fn jump_to_block_number_and_read_index(
+    index_file: &mut File,
+    block_number: u64,
+) -> Result<(u16, u64), FreezerError> {
+    let _ = index_file
+        .seek(SeekFrom::Start(
+            (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * block_number,
+        ))
+        .map_err(FreezerError::SeekFile)?;
+    Ok((
+        index_file
+            .read_u16::<BigEndian>()
+            .map_err(FreezerError::ReadFile)?,
+        index_file
+            .read_u32::<BigEndian>()
+            .map_err(FreezerError::ReadFile)? as u64,
+    ))
+}
 
-        let mut buffer = BufReader::new(index_file);
-        buffer
-            .seek(SeekFrom::Start((INDEX_SIZE * block_range.start) as u64))
-            .map_err(FreezerError::Offset)?;
-
-        let mut file_number: Vec<u16> = Vec::with_capacity(block_range.len());
-        let mut offset: Vec<u32> = Vec::with_capacity(block_range.len());
-        for _ in block_range {
-            file_number.push(
-                buffer
-                    .read_u16::<BigEndian>()
-                    .map_err(FreezerError::Buffer)?,
-            );
-            offset.push(
-                buffer
-                    .read_u32::<BigEndian>()
-                    .map_err(FreezerError::Buffer)?,
-            );
-        }
-        Ok((file_number, offset))
+fn seek_and_read(
+    file: &mut File,
+    buffer: &mut Vec<u8>,
+    start: u64,
+    end: Option<u64>,
+) -> Result<usize, FreezerError> {
+    let _ = file
+        .seek(SeekFrom::Start(start))
+        .map_err(FreezerError::SeekFile)?;
+    match end {
+        Some(pos) => file
+            .take(pos - start)
+            .read_to_end(buffer)
+            .map_err(FreezerError::ReadFile),
+        None => file.read_to_end(buffer).map_err(FreezerError::ReadFile),
     }
 }
 
-/// The raw blockchain data in bytes
-pub struct BlockData {
-    /// Specifies which blockchain data
-    pub block_part: BlockPart,
-    /// The raw data in bytes
-    pub data: Vec<u8>,
-    /// Specifies the boundary bytes between adjacent block data
-    pub bounds: Vec<usize>,
-}
-
-/// An error type collecting what can go wrong
 #[derive(Debug, Error)]
 pub enum FreezerError {
-    #[error("Could not find index file")]
-    IndexFileNotFound(#[source] std::io::Error),
-    #[error("Could not find data file")]
-    DataFileNotFound(#[source] std::io::Error),
-    #[error("Unable to jump to specified start position in index file")]
-    Offset(#[source] std::io::Error),
-    #[error("Could not read from file")]
-    Buffer(#[source] std::io::Error),
-    #[error("Index out of bound")]
-    OutOfBound,
+    #[error("Invalid block range. Minimum block is larger than or equal to maximum block")]
+    BlockRange,
+    #[error("Cannot open file")]
+    OpenFile(#[source] std::io::Error),
+    #[error("Cannot seek provided file offset")]
+    SeekFile(#[source] std::io::Error),
+    #[error("Cannot read from file")]
+    ReadFile(#[source] std::io::Error),
 }
