@@ -262,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_freezer_export_bodies() {
-        let path_buf = PathBuf::from("./tests/fixtures/ancient_01");
+        let path_buf = PathBuf::from("./tests/fixtures/bodies");
         let (offsets, data) = Freezer::Bodies
             .export(path_buf.as_path(), 20000, 49999)
             .unwrap();
@@ -291,7 +291,7 @@ mod tests {
 
     #[test]
     fn test_freezer_jump_to_block_number_and_read_single_index() {
-        let file_name = PathBuf::from("./tests/fixtures/ancient_01/bodies.cidx");
+        let file_name = PathBuf::from("./tests/fixtures/bodies/bodies.cidx");
         let mut file = File::open(file_name).unwrap();
         let (file_number, offset) =
             jump_to_block_number_and_read_single_index(&mut file, 20).unwrap();
@@ -301,7 +301,7 @@ mod tests {
 
     #[test]
     fn test_freezer_seek_and_read() {
-        let file_name = PathBuf::from("./tests/fixtures/ancient_01/bodies.0000.cdat");
+        let file_name = PathBuf::from("./tests/fixtures/bodies/bodies.0000.cdat");
         let mut file = File::open(file_name).unwrap();
         let mut buffer = Vec::<u8>::new();
 
