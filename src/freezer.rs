@@ -1,5 +1,7 @@
 use byteorder::{BigEndian, ReadBytesExt};
+use log::{debug, info, trace};
 use std::convert::TryInto;
+use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
@@ -34,6 +36,12 @@ impl Freezer {
         if min_block >= max_block {
             return Err(FreezerError::BlockRange);
         }
+        info!(
+            "Exporting {} of blocks {}-{}...",
+            format!("{}", self),
+            min_block,
+            max_block
+        );
 
         let index_filename = ancient_folder.join(self.index_filename());
         let mut index_file = File::open(index_filename).map_err(FreezerError::OpenFile)?;
@@ -44,7 +52,8 @@ impl Freezer {
         let (last_file_number, last_offset) =
             jump_to_block_number_and_read_single_index(&mut index_file, max_block)?;
 
-        // Build block_data from data files
+        // Build block data from data files
+        debug!("Exporting raw data...");
         let mut current_file_number = first_file_number;
         let mut block_data: Vec<u8> = Vec::new();
 
@@ -66,8 +75,10 @@ impl Freezer {
             let _ = seek_and_read(&mut data_file, &mut block_data, start, end)?;
             current_file_number += 1;
         }
+        debug!("Read {} bytes of data", block_data.len());
 
         // Build block_offsets from index file
+        debug!("Building index...");
         let index_size =
             (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * (max_block - min_block);
         let shift = (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * min_block;
@@ -84,14 +95,14 @@ impl Freezer {
         let mut block_offsets: Vec<u64> = Vec::with_capacity(index_size as usize);
         let mut offset_shift: i64 = -(first_offset as i64);
 
-        for chunk in tmp_buffer.chunks(6) {
+        for chunk in tmp_buffer.chunks((FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) as usize) {
             let file_number = u16::from_be_bytes(
-                chunk[0..2]
+                chunk[..FILE_NUMBER_BYTE_SIZE as usize]
                     .try_into()
                     .map_err(FreezerError::ByteConversion)?,
             );
             let offset = u32::from_be_bytes(
-                chunk[2..6]
+                chunk[FILE_NUMBER_BYTE_SIZE as usize..]
                     .try_into()
                     .map_err(FreezerError::ByteConversion)?,
             ) as i64;
@@ -109,6 +120,7 @@ impl Freezer {
             block_offsets.push((offset + offset_shift) as u64);
         }
 
+        info!("Export successful");
         Ok((block_offsets, block_data))
     }
 
@@ -133,10 +145,27 @@ impl Freezer {
     }
 }
 
+impl Display for Freezer {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match *self {
+                Self::Bodies => "bodies",
+                Self::Receipts => "receipts",
+                Self::Headers => "headers",
+                Self::Difficulty => "difficulty",
+                Self::Hashes => "hashes",
+            }
+        )
+    }
+}
+
 fn jump_to_block_number_and_read_single_index(
     index_file: &mut File,
     block_number: u64,
 ) -> Result<(u16, u64), FreezerError> {
+    trace!("Reading single index for block number {}", block_number);
     let _ = index_file
         .seek(SeekFrom::Start(
             (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * block_number,
@@ -158,6 +187,7 @@ fn seek_and_read(
     start: u64,
     end: Option<u64>,
 ) -> Result<usize, FreezerError> {
+    trace!("Reading data in file...");
     let _ = file
         .seek(SeekFrom::Start(start))
         .map_err(FreezerError::SeekFile)?;
