@@ -52,7 +52,34 @@ impl Freezer {
         let (last_file_number, last_offset) =
             jump_to_block_number_and_read_single_index(&mut index_file, max_block)?;
 
-        // Build block data from data files
+        let block_data = self.export_data(
+            ancient_folder,
+            first_file_number,
+            last_file_number,
+            first_offset,
+            last_offset,
+        )?;
+
+        let block_offsets = self.export_index(
+            ancient_folder,
+            &mut index_file,
+            min_block,
+            max_block,
+            first_offset,
+        )?;
+
+        info!("Export successful");
+        Ok((block_offsets, block_data))
+    }
+
+    fn export_data(
+        &self,
+        ancient_folder: &Path,
+        first_file_number: u16,
+        last_file_number: u16,
+        first_offset: u64,
+        last_offset: u64,
+    ) -> Result<Vec<u8>, FreezerError> {
         debug!("Exporting raw data...");
         let mut current_file_number = first_file_number;
         let mut block_data: Vec<u8> = Vec::new();
@@ -76,8 +103,17 @@ impl Freezer {
             current_file_number += 1;
         }
         debug!("Read {} bytes of data", block_data.len());
+        Ok(block_data)
+    }
 
-        // Build block_offsets from index file
+    fn export_index(
+        &self,
+        ancient_folder: &Path,
+        index_file: &mut File,
+        min_block: u64,
+        max_block: u64,
+        first_offset: u64,
+    ) -> Result<Vec<u64>, FreezerError> {
         debug!("Building index...");
         let index_size =
             (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * (max_block - min_block);
@@ -119,9 +155,7 @@ impl Freezer {
             }
             block_offsets.push((offset + offset_shift) as u64);
         }
-
-        info!("Export successful");
-        Ok((block_offsets, block_data))
+        Ok(block_offsets)
     }
 
     fn index_filename(&self) -> &'static str {
