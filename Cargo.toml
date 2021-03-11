@@ -10,6 +10,7 @@ edition = "2018"
 log = "0.4"
 thiserror = "1"
 byteorder = "1"
+snap = "1"
 
 [dev-dependencies]
 dotenv = "0.15"
@@ -19,5 +20,5 @@ criterion = "0.3"
 bench = false
 
 [[bench]]
-name = "freezer_export"
+name = "freezer_load"
 harness = false

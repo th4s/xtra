@@ -15,7 +15,7 @@ const OFFSET_NUMBER_BYTE_SIZE: u64 = 4;
 ///
 /// The variant decides about which block parts you want to export.
 #[derive(Debug, Clone, Copy)]
-pub enum Freezer {
+pub enum BlockPart {
     Bodies,
     Headers,
     Hashes,
@@ -23,11 +23,11 @@ pub enum Freezer {
     Receipts,
 }
 
-impl Freezer {
+impl BlockPart {
     /// Exports a range of block parts from min_block (inclusive) to max_block (exclusive).
     /// Returns two vecs. The second vec contains the raw block data and the first vec
     /// contains the byte offset of the first byte for every block in the second vec.
-    pub fn export(
+    pub fn load(
         &self,
         ancient_folder: &Path,
         min_block: u64,
@@ -43,6 +43,9 @@ impl Freezer {
             max_block
         );
 
+        let index_size =
+            (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * (max_block - min_block);
+        let index_shift = (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * min_block;
         let index_filename = ancient_folder.join(self.index_filename());
         let mut index_file = File::open(index_filename).map_err(FreezerError::OpenFile)?;
 
@@ -52,7 +55,8 @@ impl Freezer {
         let (last_file_number, last_offset) =
             jump_to_block_number_and_read_single_index(&mut index_file, max_block)?;
 
-        let block_data = self.export_data(
+        // Load the raw block data into RAM
+        let block_data = self.load_data(
             ancient_folder,
             first_file_number,
             last_file_number,
@@ -60,19 +64,18 @@ impl Freezer {
             last_offset,
         )?;
 
-        let block_offsets = self.export_index(
-            ancient_folder,
-            &mut index_file,
-            min_block,
-            max_block,
-            first_offset,
-        )?;
+        // Load the raw index data into RAM
+        let block_offsets_raw = self.load_index_raw(index_size, index_shift, &mut index_file)?;
+
+        // Adapt the index offsets
+        let block_offsets =
+            self.postprocess_index(ancient_folder, index_size, first_offset, block_offsets_raw)?;
 
         info!("Export successful");
         Ok((block_offsets, block_data))
     }
 
-    fn export_data(
+    fn load_data(
         &self,
         ancient_folder: &Path,
         first_file_number: u16,
@@ -106,32 +109,37 @@ impl Freezer {
         Ok(block_data)
     }
 
-    fn export_index(
+    fn load_index_raw(
         &self,
-        ancient_folder: &Path,
+        index_size: u64,
+        index_shift: u64,
         index_file: &mut File,
-        min_block: u64,
-        max_block: u64,
-        first_offset: u64,
-    ) -> Result<Vec<u64>, FreezerError> {
+    ) -> Result<Vec<u8>, FreezerError> {
         debug!("Building index...");
-        let index_size =
-            (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * (max_block - min_block);
-        let shift = (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * min_block;
-        let mut tmp_buffer: Vec<u8> = Vec::with_capacity(index_size as usize);
+
+        let mut raw_index: Vec<u8> = Vec::with_capacity(index_size as usize);
 
         let _ = index_file
-            .seek(SeekFrom::Start(shift))
+            .seek(SeekFrom::Start(index_shift))
             .map_err(FreezerError::SeekFile)?;
         let _ = index_file
             .take(index_size)
-            .read_to_end(&mut tmp_buffer)
+            .read_to_end(&mut raw_index)
             .map_err(FreezerError::ReadFile)?;
+        Ok(raw_index)
+    }
 
+    fn postprocess_index(
+        &self,
+        ancient_folder: &Path,
+        index_size: u64,
+        first_offset: u64,
+        raw_index: Vec<u8>,
+    ) -> Result<Vec<u64>, FreezerError> {
         let mut block_offsets: Vec<u64> = Vec::with_capacity(index_size as usize);
         let mut offset_shift: i64 = -(first_offset as i64);
 
-        for chunk in tmp_buffer.chunks((FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) as usize) {
+        for chunk in raw_index.chunks((FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) as usize) {
             let file_number = u16::from_be_bytes(
                 chunk[..FILE_NUMBER_BYTE_SIZE as usize]
                     .try_into()
@@ -158,7 +166,7 @@ impl Freezer {
         Ok(block_offsets)
     }
 
-    fn index_filename(&self) -> &'static str {
+    const fn index_filename(&self) -> &'static str {
         match *self {
             Self::Bodies => "bodies.cidx",
             Self::Headers => "headers.cidx",
@@ -177,9 +185,19 @@ impl Freezer {
             Self::Receipts => format!("receipts.{:04}.cdat", file_number),
         }
     }
+
+    const fn is_compressed(&self) -> bool {
+        match *self {
+            Self::Bodies => true,
+            Self::Headers => true,
+            Self::Hashes => false,
+            Self::Difficulty => false,
+            Self::Receipts => true,
+        }
+    }
 }
 
-impl Display for Freezer {
+impl Display for BlockPart {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -253,7 +271,7 @@ pub enum FreezerError {
     BlockOffset,
 }
 
-// Fixture data in folder `ancient_01` contains the bodies of the first 50k blocks of the
+// Fixture data in folder `tests/fixtures/bodies` contains the bodies of the first 50k blocks of the
 // Ethereum mainnet exported from the geth `chaindata/ancient` folder
 #[cfg(test)]
 mod tests {
@@ -263,8 +281,8 @@ mod tests {
     #[test]
     fn test_freezer_export_bodies() {
         let path_buf = PathBuf::from("./tests/fixtures/bodies");
-        let (offsets, data) = Freezer::Bodies
-            .export(path_buf.as_path(), 20000, 49999)
+        let (offsets, data) = BlockPart::Bodies
+            .load(path_buf.as_path(), 20000, 49999)
             .unwrap();
 
         // The number of bytes should be larger than our largest offset
@@ -275,7 +293,7 @@ mod tests {
             assert!(elements[1] > elements[0]);
         }
 
-        let (offsets, _data) = Freezer::Bodies.export(path_buf.as_path(), 1, 25).unwrap();
+        let (offsets, _data) = BlockPart::Bodies.load(path_buf.as_path(), 1, 25).unwrap();
 
         // We know that blocks 3, 4, 7, 21 have uncles. Thus, we can check for off-by-one errors, by making sure
         // that the byte size of these blocks is larger
