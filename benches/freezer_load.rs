@@ -1,12 +1,8 @@
-use criterion::{
-    criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode, Throughput,
-};
+use criterion::{criterion_group, criterion_main, Criterion};
 use mercury::freezer::BlockPart;
-use std::ops::Range;
 use std::path::PathBuf;
 
-const START_BLOCK: u64 = 0;
-const BLOCK_TEST_RANGE: Range<u64> = 1..11;
+const BLOCKS: u64 = 100_000;
 
 pub fn c_load_bodies(c: &mut Criterion) {
     dotenv::from_filename("bench.env").expect("Environment file bench.env not found");
@@ -14,26 +10,18 @@ pub fn c_load_bodies(c: &mut Criterion) {
         std::env::var("FREEZER_LOAD_BODIES")
             .expect("Environment variable FREEZER_LOAD_BODIES not found"),
     );
-
-    let mut group = c.benchmark_group("c_load_bodies");
-    for blocks in BLOCK_TEST_RANGE.map(|el| el * 100_000) {
-        group.throughput(Throughput::Elements(blocks));
-        group.sampling_mode(SamplingMode::Flat);
-        group.sample_size(10);
-        group.bench_with_input(
-            BenchmarkId::from_parameter(blocks),
-            &blocks,
-            |bencher, &blocks| {
-                bencher.iter(|| {
-                    BlockPart::Bodies
-                        .load(ancient_folder.as_path(), START_BLOCK, START_BLOCK + blocks)
-                        .unwrap()
-                })
-            },
-        );
-    }
-    group.finish()
+    c.bench_function(&format!("freezer_load_bodies_{}", BLOCKS), |bencher| {
+        bencher.iter(|| {
+            BlockPart::Bodies
+                .load(ancient_folder.as_path(), 0, BLOCKS)
+                .unwrap()
+        })
+    });
 }
 
-criterion_group!(load_bodies, c_load_bodies);
+criterion_group! {
+name = load_bodies;
+config = Criterion::default();
+targets = c_load_bodies
+}
 criterion_main!(load_bodies);
