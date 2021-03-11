@@ -1,5 +1,6 @@
 use byteorder::{BigEndian, ReadBytesExt};
 use log::{debug, info, trace};
+use snap::raw::Decoder;
 use std::convert::TryInto;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
@@ -10,6 +11,22 @@ use thiserror::Error;
 // A single index consists of 2 bytes (u16) for the file number and 4 bytes (u32) for the offset
 const FILE_NUMBER_BYTE_SIZE: u64 = 2;
 const OFFSET_NUMBER_BYTE_SIZE: u64 = 4;
+
+pub struct Blob(Vec<u8>);
+
+impl Blob {
+    pub fn into_inner(self) -> Vec<u8> {
+        self.0
+    }
+
+    pub fn inner(&self) -> &Vec<u8> {
+        &self.0
+    }
+
+    pub fn inner_mut(&mut self) -> &mut Vec<u8> {
+        &mut self.0
+    }
+}
 
 /// Allows to export block parts from the `chaindata/ancient` folder from geth
 ///
@@ -24,7 +41,7 @@ pub enum BlockPart {
 }
 
 impl BlockPart {
-    /// Exports a range of block parts from min_block (inclusive) to max_block (exclusive).
+    /// Loads a range of block parts from min_block (inclusive) to max_block (exclusive).
     /// Returns two vecs. The second vec contains the raw block data and the first vec
     /// contains the byte offset of the first byte for every block in the second vec.
     pub fn load(
@@ -32,12 +49,12 @@ impl BlockPart {
         ancient_folder: &Path,
         min_block: u64,
         max_block: u64,
-    ) -> Result<(Vec<u64>, Vec<u8>), FreezerError> {
+    ) -> Result<Vec<Blob>, FreezerError> {
         if min_block >= max_block {
             return Err(FreezerError::BlockRange);
         }
         info!(
-            "Exporting {} of blocks {}-{}...",
+            "Reading {} of blocks {}-{}...",
             format!("{}", self),
             min_block,
             max_block
@@ -71,8 +88,20 @@ impl BlockPart {
         let block_offsets =
             self.postprocess_index(ancient_folder, index_size, first_offset, block_offsets_raw)?;
 
-        info!("Export successful");
-        Ok((block_offsets, block_data))
+        // Decompress if necessary and turn into vec of blobs
+        let mut block_parts: Vec<Blob> = Vec::new();
+        for offsets in block_offsets.windows(2) {
+            let blob = self.to_blob(&block_data[offsets[0] as usize..offsets[1] as usize])?;
+            block_parts.push(blob)
+        }
+        // We need to add the last block part manually, since we are working with offsets here
+        let blob = self.to_blob(
+            &block_data[*block_offsets.last().ok_or(FreezerError::BlockOffset)? as usize..],
+        )?;
+        block_parts.push(blob);
+
+        info!("Reading successful");
+        Ok(block_parts)
     }
 
     fn load_data(
@@ -83,7 +112,7 @@ impl BlockPart {
         first_offset: u64,
         last_offset: u64,
     ) -> Result<Vec<u8>, FreezerError> {
-        debug!("Exporting raw data...");
+        debug!("Reading raw block data...");
         let mut current_file_number = first_file_number;
         let mut block_data: Vec<u8> = Vec::new();
 
@@ -195,6 +224,19 @@ impl BlockPart {
             Self::Receipts => true,
         }
     }
+
+    fn to_blob(&self, input: &[u8]) -> Result<Blob, FreezerError> {
+        if self.is_compressed() {
+            let mut decoder = Decoder::new();
+            let out = decoder
+                .decompress_vec(input)
+                .map_err(FreezerError::SnappyDecompress)?;
+            return Ok(Blob(out));
+        }
+        let mut out: Vec<u8> = Vec::with_capacity(input.len());
+        out.copy_from_slice(input);
+        Ok(Blob(out))
+    }
 }
 
 impl Display for BlockPart {
@@ -269,6 +311,8 @@ pub enum FreezerError {
     FileMetadata(#[source] std::io::Error),
     #[error("Cannot determine block offset")]
     BlockOffset,
+    #[error("Read error during decompression")]
+    SnappyDecompress(#[source] snap::Error),
 }
 
 // Fixture data in folder `tests/fixtures/bodies` contains the bodies of the first 50k blocks of the
@@ -281,30 +325,23 @@ mod tests {
     #[test]
     fn test_freezer_export_bodies() {
         let path_buf = PathBuf::from("./tests/fixtures/bodies");
-        let (offsets, data) = BlockPart::Bodies
-            .load(path_buf.as_path(), 20000, 49999)
-            .unwrap();
-
-        // The number of bytes should be larger than our largest offset
-        assert!(data.len() > *offsets.last().unwrap() as usize);
-
-        // Offsets should be increasing
-        for elements in offsets.windows(2) {
-            assert!(elements[1] > elements[0]);
-        }
-
-        let (offsets, _data) = BlockPart::Bodies.load(path_buf.as_path(), 1, 25).unwrap();
+        let bodies = BlockPart::Bodies.load(path_buf.as_path(), 1, 25).unwrap();
 
         // We know that blocks 3, 4, 7, 21 have uncles. Thus, we can check for off-by-one errors, by making sure
         // that the byte size of these blocks is larger
-        for (pos, elements) in offsets.windows(2).enumerate() {
+        for (pos, blob) in bodies.iter().enumerate() {
             // We have excluded block 0, so we have to shift the positions by one
             if [2, 3, 6, 20].contains(&pos) {
-                assert!(elements[1] - elements[0] > 10)
+                assert!(blob.inner().len() > 10)
             } else {
-                assert!(elements[1] - elements[0] < 10)
+                assert!(blob.inner().len() < 10)
             }
         }
+
+        // Check if we can read 50k blocks without errors
+        let _bodies = BlockPart::Bodies
+            .load(path_buf.as_path(), 0, 49999)
+            .unwrap();
     }
 
     #[test]

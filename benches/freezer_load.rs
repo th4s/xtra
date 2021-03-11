@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::path::PathBuf;
 
 const START_BLOCK: u64 = 0;
-const BLOCK_TEST_RANGE: Range<u64> = 10..30;
+const BLOCK_TEST_RANGE: Range<u64> = 1..11;
 
 pub fn c_load_bodies(c: &mut Criterion) {
     dotenv::from_filename("bench.env").expect("Environment file bench.env not found");
