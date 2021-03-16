@@ -8,6 +8,8 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use thiserror::Error;
 
+mod rlp;
+
 // A single index consists of 2 bytes (u16) for the file number and 4 bytes (u32) for the offset
 const FILE_NUMBER_BYTE_SIZE: u64 = 2;
 const OFFSET_NUMBER_BYTE_SIZE: u64 = 4;
@@ -101,6 +103,9 @@ impl BlockPart {
         block_parts.push(blob);
 
         // Next step is to RLP-decode
+        for part in block_parts.iter_mut() {
+            // *part = rlp::decode(part.inner().as_slice())?;
+        }
 
         info!("Reading successful");
         Ok(block_parts)
@@ -296,57 +301,6 @@ fn seek_and_read(
     }
 }
 
-fn rlp_decode(input: &[u8]) -> Result<Blob, FreezerError> {
-    let mut out: Vec<u8> = Vec::new();
-    loop {
-        let (rlp_bytes, list_start) = rlp_sub_slice(input)?;
-        out.extend_from_slice(rlp_bytes);
-        if list_start == -1 {
-            break;
-        }
-    }
-    Ok(Blob(out))
-}
-
-fn rlp_sub_slice(rlp_slice: &[u8]) -> Result<(&[u8], i32), FreezerError> {
-    let input_len = rlp_slice.len() as usize;
-    if input_len == 0 {
-        return Err(FreezerError::RlpInvalidLength);
-    }
-    let prefix = rlp_slice[0] as usize;
-    Ok(if prefix <= 0x7f {
-        (&rlp_slice[..1], -1)
-    } else if prefix <= 0xb7 && input_len > prefix - 0x80 {
-        (&rlp_slice[1..prefix - 0x80], -1)
-    } else if prefix <= 0xbf
-        && input_len > prefix - 0xb7
-        && input_len > prefix - 0xb7 + usize_from_u8(&rlp_slice[1..prefix - 0xb7])?
-    {
-        (
-            &rlp_slice[prefix - 0xb6..usize_from_u8(&rlp_slice[1..prefix - 0xb7])?],
-            -1,
-        )
-    } else if prefix <= 0xf7 && input_len > prefix - 0xc0 {
-        (&rlp_slice[1..prefix - 0xc0], (prefix - 0xbf) as i32)
-    } else if prefix <= 0xff
-        && input_len > prefix - 0xf7
-        && input_len > prefix - 0xf7 + usize_from_u8(&rlp_slice[1..prefix - 0xf7])?
-    {
-        (
-            &rlp_slice[prefix - 0xf6..usize_from_u8(&rlp_slice[1..prefix - 0xf7])?],
-            rlp_slice[(prefix - 0xf6 + usize_from_u8(&rlp_slice[1..prefix - 0xf7])?)] as i32,
-        )
-    } else {
-        return Err(FreezerError::RlpDecoding);
-    })
-}
-
-fn usize_from_u8(input: &[u8]) -> Result<usize, FreezerError> {
-    Ok(usize::from_be_bytes(
-        input.try_into().map_err(|_err| FreezerError::RlpDecoding)?,
-    ))
-}
-
 /// Collects different errors
 #[derive(Debug, Error)]
 pub enum FreezerError {
@@ -366,10 +320,6 @@ pub enum FreezerError {
     BlockOffset,
     #[error("Read error during decompression")]
     SnappyDecompress(#[source] snap::Error),
-    #[error("RLP Error: Invalid Length")]
-    RlpInvalidLength,
-    #[error("RLP Error while decoding")]
-    RlpDecoding,
 }
 
 // Fixture data in folder `tests/fixtures/bodies` contains the bodies of the first 50k blocks of the
@@ -396,9 +346,7 @@ mod tests {
         }
 
         // Check if we can read 50k blocks without errors
-        let _bodies = BlockPart::Bodies
-            .load(path_buf.as_path(), 0, 49999)
-            .unwrap();
+        let _bodies = BlockPart::Bodies.load(path_buf.as_path(), 0, 100).unwrap();
     }
 
     #[test]
