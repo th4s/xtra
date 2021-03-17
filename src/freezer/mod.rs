@@ -1,3 +1,4 @@
+use crate::freezer::rlp::{Rlp, RlpError};
 use byteorder::{BigEndian, ReadBytesExt};
 use log::{debug, info, trace};
 use snap::raw::Decoder;
@@ -51,7 +52,7 @@ impl BlockPart {
         ancient_folder: &Path,
         min_block: u64,
         max_block: u64,
-    ) -> Result<Vec<Blob>, FreezerError> {
+    ) -> Result<Vec<Rlp>, FreezerError> {
         if min_block >= max_block {
             return Err(FreezerError::BlockRange);
         }
@@ -103,12 +104,14 @@ impl BlockPart {
         block_parts.push(blob);
 
         // Next step is to RLP-decode
-        for part in block_parts.iter_mut() {
-            // *part = rlp::decode(part.inner().as_slice())?;
+        let mut rlp_objects: Vec<Rlp> = Vec::new();
+        for part in block_parts.iter() {
+            let rlp = rlp::decode(part.inner().as_slice())?.remove(0);
+            rlp_objects.push(rlp);
         }
 
         info!("Reading successful");
-        Ok(block_parts)
+        Ok(rlp_objects)
     }
 
     fn load_data(
@@ -320,6 +323,8 @@ pub enum FreezerError {
     BlockOffset,
     #[error("Read error during decompression")]
     SnappyDecompress(#[source] snap::Error),
+    #[error("Rlp Error: {0}")]
+    Rlp(#[from] RlpError),
 }
 
 // Fixture data in folder `tests/fixtures/bodies` contains the bodies of the first 50k blocks of the
@@ -332,21 +337,10 @@ mod tests {
     #[test]
     fn test_freezer_export_bodies() {
         let path_buf = PathBuf::from("./tests/fixtures/bodies");
-        let bodies = BlockPart::Bodies.load(path_buf.as_path(), 1, 25).unwrap();
-
-        // We know that blocks 3, 4, 7, 21 have uncles. Thus, we can check for off-by-one errors, by making sure
-        // that the byte size of these blocks is larger
-        for (pos, blob) in bodies.iter().enumerate() {
-            // We have excluded block 0, so we have to shift the positions by one
-            if [2, 3, 6, 20].contains(&pos) {
-                assert!(blob.inner().len() > 10)
-            } else {
-                assert!(blob.inner().len() < 10)
-            }
-        }
-
         // Check if we can read 50k blocks without errors
-        let _bodies = BlockPart::Bodies.load(path_buf.as_path(), 0, 100).unwrap();
+        let _bodies = BlockPart::Bodies
+            .load(path_buf.as_path(), 0, 49999)
+            .unwrap();
     }
 
     #[test]
