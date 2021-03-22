@@ -15,6 +15,7 @@ mod rlp;
 const FILE_NUMBER_BYTE_SIZE: u64 = 2;
 const OFFSET_NUMBER_BYTE_SIZE: u64 = 4;
 
+#[derive(Debug)]
 pub struct Blob(Vec<u8>);
 
 impl Blob {
