@@ -1,3 +1,4 @@
+use log::trace;
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -10,6 +11,7 @@ pub enum Rlp {
 }
 
 pub fn decode(rlp_slice: &[u8]) -> Result<Vec<Rlp>, RlpError> {
+    trace!("RLP-decoding {:?}", rlp_slice);
     let mut out: Vec<Rlp> = Vec::new();
     let (mut len, mut slice) = (rlp_slice.len(), rlp_slice);
     while len > 0 {
@@ -18,6 +20,7 @@ pub fn decode(rlp_slice: &[u8]) -> Result<Vec<Rlp>, RlpError> {
         slice = matched.1;
         len = matched.1.len();
     }
+    trace!("Decoded: {:?}", out);
     Ok(out)
 }
 

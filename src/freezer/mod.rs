@@ -15,23 +15,6 @@ mod rlp;
 const FILE_NUMBER_BYTE_SIZE: u64 = 2;
 const OFFSET_NUMBER_BYTE_SIZE: u64 = 4;
 
-#[derive(Debug)]
-pub struct Blob(Vec<u8>);
-
-impl Blob {
-    pub fn into_inner(self) -> Vec<u8> {
-        self.0
-    }
-
-    pub fn inner(&self) -> &Vec<u8> {
-        &self.0
-    }
-
-    pub fn inner_mut(&mut self) -> &mut Vec<u8> {
-        &mut self.0
-    }
-}
-
 /// Allows to export block parts from the `chaindata/ancient` folder from geth
 ///
 /// The variant decides about which block parts you want to export.
@@ -93,7 +76,7 @@ impl BlockPart {
             self.postprocess_index(ancient_folder, index_size, first_offset, block_offsets_raw)?;
 
         // Decompress if necessary and turn into vec of blobs
-        let mut block_parts: Vec<Blob> = Vec::new();
+        let mut block_parts: Vec<Vec<u8>> = Vec::new();
         for offsets in block_offsets.windows(2) {
             let blob = self.to_blob(&block_data[offsets[0] as usize..offsets[1] as usize])?;
             block_parts.push(blob)
@@ -107,7 +90,7 @@ impl BlockPart {
         // Next step is to RLP-decode
         let mut rlp_objects: Vec<Rlp> = Vec::new();
         for part in block_parts.iter() {
-            let rlp = rlp::decode(part.inner().as_slice())?.remove(0);
+            let rlp = rlp::decode(part.as_slice())?.remove(0);
             rlp_objects.push(rlp);
         }
 
@@ -123,7 +106,8 @@ impl BlockPart {
         first_offset: u64,
         last_offset: u64,
     ) -> Result<Vec<u8>, FreezerError> {
-        debug!("Reading raw block data...");
+        debug!("Reading raw block data from file number {} with offset {} until file number {} with offset {}...",
+               first_file_number, first_offset, last_file_number, last_offset);
         let mut current_file_number = first_file_number;
         let mut block_data: Vec<u8> = Vec::new();
 
@@ -155,7 +139,10 @@ impl BlockPart {
         index_shift: u64,
         index_file: &mut File,
     ) -> Result<Vec<u8>, FreezerError> {
-        debug!("Building index...");
+        debug!(
+            "Reading {} bytes starting at byte {} to build index...",
+            index_size, index_shift
+        );
 
         let mut raw_index: Vec<u8> = Vec::with_capacity(index_size as usize);
 
@@ -176,6 +163,7 @@ impl BlockPart {
         first_offset: u64,
         raw_index: Vec<u8>,
     ) -> Result<Vec<u64>, FreezerError> {
+        debug!("Postprocessing index...");
         let mut block_offsets: Vec<u64> = Vec::with_capacity(index_size as usize);
         let mut offset_shift: i64 = -(first_offset as i64);
 
@@ -236,17 +224,17 @@ impl BlockPart {
         }
     }
 
-    fn to_blob(&self, input: &[u8]) -> Result<Blob, FreezerError> {
+    fn to_blob(&self, input: &[u8]) -> Result<Vec<u8>, FreezerError> {
         if self.is_compressed() {
             let mut decoder = Decoder::new();
             let out = decoder
                 .decompress_vec(input)
                 .map_err(FreezerError::SnappyDecompress)?;
-            return Ok(Blob(out));
+            return Ok(out);
         }
         let mut out: Vec<u8> = Vec::with_capacity(input.len());
         out.copy_from_slice(input);
-        Ok(Blob(out))
+        Ok(out)
     }
 }
 
@@ -292,7 +280,7 @@ fn seek_and_read(
     start: u64,
     end: Option<u64>,
 ) -> Result<usize, FreezerError> {
-    trace!("Reading data in file...");
+    trace!("Reading data in file, beginning at byte {}...", start);
     let _ = file
         .seek(SeekFrom::Start(start))
         .map_err(FreezerError::SeekFile)?;
@@ -310,15 +298,15 @@ fn seek_and_read(
 pub enum FreezerError {
     #[error("Invalid block range. Minimum block is larger than or equal to maximum block")]
     BlockRange,
-    #[error("Cannot open file")]
+    #[error("Cannot open file, {0}")]
     OpenFile(#[source] std::io::Error),
-    #[error("Cannot seek provided file offset")]
+    #[error("Cannot seek provided file offset, {0}")]
     SeekFile(#[source] std::io::Error),
-    #[error("Cannot read from file")]
+    #[error("Cannot read from file, {0}")]
     ReadFile(#[source] std::io::Error),
-    #[error("Unable to convert raw bytes into block offsets")]
+    #[error("Unable to convert raw bytes into block offsets, {0}")]
     ByteConversion(#[source] std::array::TryFromSliceError),
-    #[error("Unable to read file metadata")]
+    #[error("Unable to read file metadata, {0}")]
     FileMetadata(#[source] std::io::Error),
     #[error("Cannot determine block offset")]
     BlockOffset,
