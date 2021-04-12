@@ -6,7 +6,7 @@ use std::convert::TryInto;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 mod rlp;
@@ -14,6 +14,25 @@ mod rlp;
 // A single index consists of 2 bytes (u16) for the file number and 4 bytes (u32) for the offset
 const FILE_NUMBER_BYTE_SIZE: u64 = 2;
 const OFFSET_NUMBER_BYTE_SIZE: u64 = 4;
+
+pub struct Freezer {
+    ancient_folder: PathBuf,
+}
+
+impl Freezer {
+    pub fn new(ancient_folder: PathBuf) -> Self {
+        Freezer { ancient_folder }
+    }
+
+    pub fn defrost(
+        &self,
+        block_part: BlockPart,
+        min_block: u64,
+        max_block: u64,
+    ) -> Result<(), FreezerError> {
+        Ok(())
+    }
+}
 
 /// Allows to export block parts from the `chaindata/ancient` folder from geth
 ///
@@ -59,6 +78,13 @@ impl BlockPart {
         let (last_file_number, last_offset) =
             jump_to_block_number_and_read_single_index(&mut index_file, max_block)?;
 
+        // Load the raw index data into RAM
+        let block_offsets_raw = self.load_index_raw(index_size, index_shift, &mut index_file)?;
+
+        // Adapt the index offsets
+        let block_offsets =
+            self.postprocess_index(ancient_folder, index_size, first_offset, block_offsets_raw)?;
+
         // Load the raw block data into RAM
         let block_data = self.load_data(
             ancient_folder,
@@ -68,27 +94,11 @@ impl BlockPart {
             last_offset,
         )?;
 
-        // Load the raw index data into RAM
-        let block_offsets_raw = self.load_index_raw(index_size, index_shift, &mut index_file)?;
-
-        // Adapt the index offsets
-        let block_offsets =
-            self.postprocess_index(ancient_folder, index_size, first_offset, block_offsets_raw)?;
-
         // Decompress if necessary and turn into vec of blobs
-        let mut block_parts: Vec<Vec<u8>> = Vec::new();
-        for offsets in block_offsets.windows(2) {
-            let blob = self.to_blob(&block_data[offsets[0] as usize..offsets[1] as usize])?;
-            block_parts.push(blob)
-        }
-        // We need to add the last block part manually, since we are working with offsets here
-        let blob = self.to_blob(
-            &block_data[*block_offsets.last().ok_or(FreezerError::BlockOffset)? as usize..],
-        )?;
-        block_parts.push(blob);
+        let block_parts = self.decompress(block_data.as_slice(), block_offsets.as_slice())?;
 
         // Next step is to RLP-decode
-        let mut rlp_objects: Vec<Rlp> = Vec::new();
+        let mut rlp_objects: Vec<Rlp> = self.rlp_decode(block_parts.as_slice())?;
         for part in block_parts.iter() {
             let rlp = rlp::decode(part.as_slice())?.remove(0);
             rlp_objects.push(rlp);
@@ -194,6 +204,45 @@ impl BlockPart {
         Ok(block_offsets)
     }
 
+    fn decompress(
+        &self,
+        block_data: &[u8],
+        block_offsets: &[u64],
+    ) -> Result<Vec<Vec<u8>>, FreezerError> {
+        let mut block_parts: Vec<Vec<u8>> = Vec::new();
+        let decompressor = |input: &[u8]| -> Result<Vec<u8>, FreezerError> {
+            if self.is_compressed() {
+                Decoder::new()
+                    .decompress_vec(input)
+                    .map_err(FreezerError::SnappyDecompress)
+            } else {
+                let mut out = Vec::with_capacity(input.len());
+                out.copy_from_slice(input);
+                Ok(out)
+            }
+        };
+
+        for offsets in block_offsets.windows(2) {
+            let blob = decompressor(&block_data[offsets[0] as usize..offsets[1] as usize])?;
+            block_parts.push(blob)
+        }
+        // We need to add the last block part manually, since we are working with offsets here
+        let blob = decompressor(
+            &block_data[*block_offsets.last().ok_or(FreezerError::BlockOffset)? as usize..],
+        )?;
+        block_parts.push(blob);
+        Ok(block_parts)
+    }
+
+    fn rlp_decode(&self, block_parts: &[Vec<u8>]) -> Result<Vec<Rlp>, FreezerError> {
+        let mut rlp_objects: Vec<Rlp> = Vec::new();
+        for part in block_parts.iter() {
+            let rlp = rlp::decode(part.as_slice())?.remove(0);
+            rlp_objects.push(rlp);
+        }
+        Ok(rlp_objects)
+    }
+
     const fn index_filename(&self) -> &'static str {
         match *self {
             Self::Bodies => "bodies.cidx",
@@ -222,19 +271,6 @@ impl BlockPart {
             Self::Difficulty => false,
             Self::Receipts => true,
         }
-    }
-
-    fn to_blob(&self, input: &[u8]) -> Result<Vec<u8>, FreezerError> {
-        if self.is_compressed() {
-            let mut decoder = Decoder::new();
-            let out = decoder
-                .decompress_vec(input)
-                .map_err(FreezerError::SnappyDecompress)?;
-            return Ok(out);
-        }
-        let mut out: Vec<u8> = Vec::with_capacity(input.len());
-        out.copy_from_slice(input);
-        Ok(out)
     }
 }
 
@@ -310,7 +346,7 @@ pub enum FreezerError {
     FileMetadata(#[source] std::io::Error),
     #[error("Cannot determine block offset")]
     BlockOffset,
-    #[error("Read error during decompression")]
+    #[error("Read error during decompression, {0}")]
     SnappyDecompress(#[source] snap::Error),
     #[error("Rlp Error: {0}")]
     Rlp(#[from] RlpError),

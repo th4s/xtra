@@ -1,6 +1,7 @@
 use log::trace;
 use thiserror::Error;
 
+/// An enum RLP encoded bytes
 #[derive(Debug, PartialEq, Clone)]
 pub enum Rlp {
     Bytes(Vec<u8>),
@@ -10,6 +11,7 @@ pub enum Rlp {
     EmptyString,
 }
 
+/// Decodes an RLP encoded slice
 pub fn decode(rlp_slice: &[u8]) -> Result<Vec<Rlp>, RlpError> {
     trace!("RLP-decoding {:?}", rlp_slice);
     let mut out: Vec<Rlp> = Vec::new();
@@ -145,6 +147,7 @@ fn match_long_list(rlp_slice: &[u8], len: usize) -> Result<(Option<Rlp>, &[u8]),
     )
 }
 
+/// Enum for collecting RLP errors
 #[derive(Debug, Error)]
 pub enum RlpError {
     #[error("No match found while parsing rlp slice")]
