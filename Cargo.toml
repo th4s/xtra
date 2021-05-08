@@ -11,6 +11,7 @@ log = "0.4"
 thiserror = "1"
 byteorder = "1"
 snap = "1"
+serde = "1"
 
 [dev-dependencies]
 dotenv = "0.15"

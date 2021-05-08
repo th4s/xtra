@@ -30,7 +30,7 @@ impl Freezer {
         min_block: u64,
         max_block: u64,
     ) -> Result<(), FreezerError> {
-        Ok(())
+        todo!()
     }
 }
 
@@ -98,11 +98,7 @@ impl BlockPart {
         let block_parts = self.decompress(block_data.as_slice(), block_offsets.as_slice())?;
 
         // Next step is to RLP-decode
-        let mut rlp_objects: Vec<Rlp> = self.rlp_decode(block_parts.as_slice())?;
-        for part in block_parts.iter() {
-            let rlp = rlp::decode(part.as_slice())?.remove(0);
-            rlp_objects.push(rlp);
-        }
+        let rlp_objects: Vec<Rlp> = self.rlp_decode(block_parts.as_slice())?;
 
         info!("Reading successful");
         Ok(rlp_objects)
@@ -212,6 +208,7 @@ impl BlockPart {
         let mut block_parts: Vec<Vec<u8>> = Vec::new();
         let decompressor = |input: &[u8]| -> Result<Vec<u8>, FreezerError> {
             if self.is_compressed() {
+                debug!("Decompressing data...");
                 Decoder::new()
                     .decompress_vec(input)
                     .map_err(FreezerError::SnappyDecompress)
@@ -235,6 +232,7 @@ impl BlockPart {
     }
 
     fn rlp_decode(&self, block_parts: &[Vec<u8>]) -> Result<Vec<Rlp>, FreezerError> {
+        debug!("Deserializing into objects...");
         let mut rlp_objects: Vec<Rlp> = Vec::new();
         for part in block_parts.iter() {
             let rlp = rlp::decode(part.as_slice())?.remove(0);
