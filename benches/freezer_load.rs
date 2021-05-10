@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use mercury::freezer::BlockPart;
 use std::path::PathBuf;
+use xtra::freezer::BlockPart;
 
 const BLOCKS: u64 = 100_000;
 
