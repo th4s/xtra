@@ -1,6 +1,8 @@
 use log::trace;
 use thiserror::Error;
 
+mod deserialize;
+
 /// An enum RLP encoded bytes
 #[derive(Debug, PartialEq, Clone)]
 pub enum Rlp {

@@ -367,6 +367,14 @@ mod tests {
     }
 
     #[test]
+    fn test_freezer_export_headers() {
+        let path_buf = PathBuf::from("./tests/fixtures/headers");
+        // Check if we can read some headers without errors
+        let headers = BlockPart::Headers.load(path_buf.as_path(), 1, 2).unwrap();
+        println!("{:#?}", headers);
+    }
+
+    #[test]
     fn test_freezer_jump_to_block_number_and_read_single_index() {
         let file_name = PathBuf::from("./tests/fixtures/bodies/bodies.cidx");
         let mut file = File::open(file_name).unwrap();
