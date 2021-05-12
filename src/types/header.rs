@@ -1,9 +1,9 @@
-use ethereum_types::{H160, H256, H64, U256, U64};
-
+use ethereum_types::{H160, H256, H64, U128, U256};
+use serde::Deserialize;
 // Header returned by subscription
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Header {
-    pub number: U64,
+    pub number: U128,
     pub hash: H256,
     pub parent_hash: H256,
     pub nonce: H64,

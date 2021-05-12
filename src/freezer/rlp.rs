@@ -1,8 +1,6 @@
 use log::trace;
 use thiserror::Error;
 
-mod deserialize;
-
 /// An enum RLP encoded bytes
 #[derive(Debug, PartialEq, Clone)]
 pub enum Rlp {
@@ -26,14 +24,6 @@ pub fn decode(rlp_slice: &[u8]) -> Result<Vec<Rlp>, RlpError> {
     }
     trace!("Decoded: {:?}", out);
     Ok(out)
-}
-
-fn usize_from_u8(input: &[u8]) -> usize {
-    let len = input.len();
-    let out = input.iter().enumerate().fold(0_usize, |acc, (i, el)| {
-        acc + 256_usize.pow((len - 1 - i) as u32) * (*el as usize)
-    });
-    out
 }
 
 fn match_rlp(rlp_slice: &[u8]) -> Result<(Rlp, &[u8]), RlpError> {
@@ -147,6 +137,14 @@ fn match_long_list(rlp_slice: &[u8], len: usize) -> Result<(Option<Rlp>, &[u8]),
             (None, rlp_slice)
         },
     )
+}
+
+fn usize_from_u8(input: &[u8]) -> usize {
+    let len = input.len();
+    let out = input.iter().enumerate().fold(0_usize, |acc, (i, el)| {
+        acc + 256_usize.pow((len - 1 - i) as u32) * (*el as usize)
+    });
+    out
 }
 
 /// Enum for collecting RLP errors
