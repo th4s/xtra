@@ -16,7 +16,7 @@ refor() {
     tmpfilevar=$(rif $1 $2)
     tmpoffsetvar=$(rio $1 $2)
     tmpoffsetvar2=$(rio $1 $(($2 + 1)))
-    echo "File: ${tmpfilevar} Start: ${tmpoffsetvar} Length: $((${tmpoffsetvar2} - ${tmpoffsetvar} - 1))"
+    echo "File: ${tmpfilevar} Start: ${tmpoffsetvar} Length: $((${tmpoffsetvar2} - ${tmpoffsetvar}))"
 }
 
 rb() {

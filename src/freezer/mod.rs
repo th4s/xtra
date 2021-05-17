@@ -1,4 +1,3 @@
-use crate::freezer::rlp::{Rlp, RlpError};
 use byteorder::{BigEndian, ReadBytesExt};
 use log::{debug, info, trace};
 use snap::raw::Decoder;
@@ -9,7 +8,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-mod rlp;
+pub mod rlp;
 
 // A single index consists of 2 bytes (u16) for the file number and 4 bytes (u32) for the offset
 const FILE_NUMBER_BYTE_SIZE: u64 = 2;
@@ -55,7 +54,7 @@ impl BlockPart {
         ancient_folder: &Path,
         min_block: u64,
         max_block: u64,
-    ) -> Result<Vec<Rlp>, FreezerError> {
+    ) -> Result<Vec<u32>, FreezerError> {
         if min_block >= max_block {
             return Err(FreezerError::BlockRange);
         }
@@ -98,10 +97,10 @@ impl BlockPart {
         let block_parts = self.decompress(block_data.as_slice(), block_offsets.as_slice())?;
 
         // Next step is to RLP-decode
-        let rlp_objects: Vec<Rlp> = self.rlp_decode(block_parts.as_slice())?;
+        // let rlp_objects: Vec<Rlp> = self.rlp_decode(block_parts.as_slice())?;
 
         info!("Reading successful");
-        Ok(rlp_objects)
+        Ok(vec![])
     }
 
     fn load_data(
@@ -231,16 +230,6 @@ impl BlockPart {
         Ok(block_parts)
     }
 
-    fn rlp_decode(&self, block_parts: &[Vec<u8>]) -> Result<Vec<Rlp>, FreezerError> {
-        debug!("Deserializing into objects...");
-        let mut rlp_objects: Vec<Rlp> = Vec::new();
-        for part in block_parts.iter() {
-            let rlp = rlp::decode(part.as_slice())?.remove(0);
-            rlp_objects.push(rlp);
-        }
-        Ok(rlp_objects)
-    }
-
     const fn index_filename(&self) -> &'static str {
         match *self {
             Self::Bodies => "bodies.cidx",
@@ -346,8 +335,6 @@ pub enum FreezerError {
     BlockOffset,
     #[error("Read error during decompression, {0}")]
     SnappyDecompress(#[source] snap::Error),
-    #[error("Rlp Error: {0}")]
-    Rlp(#[from] RlpError),
 }
 
 // Fixture data in folder `tests/fixtures/bodies` contains the bodies of the first 50k blocks of the
@@ -371,7 +358,7 @@ mod tests {
         let path_buf = PathBuf::from("./tests/fixtures/headers");
         // Check if we can read some headers without errors
         let headers = BlockPart::Headers.load(path_buf.as_path(), 1, 2).unwrap();
-        println!("{:#?}", headers);
+        println!("{:?}", headers);
     }
 
     #[test]

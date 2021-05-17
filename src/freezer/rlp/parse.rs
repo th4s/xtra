@@ -1,32 +1,16 @@
-use log::trace;
 use thiserror::Error;
 
 /// An enum RLP encoded bytes
 #[derive(Debug, PartialEq, Clone)]
-pub enum Rlp {
-    Bytes(Vec<u8>),
-    List(Vec<Rlp>),
+pub(crate) enum Rlp<'a> {
+    Bytes(&'a [u8]),
+    List(&'a [u8]),
     Byte(u8),
     EmptyList,
-    EmptyString,
+    Empty,
 }
 
-/// Decodes an RLP encoded slice
-pub fn decode(rlp_slice: &[u8]) -> Result<Vec<Rlp>, RlpError> {
-    trace!("RLP-decoding {:?}", rlp_slice);
-    let mut out: Vec<Rlp> = Vec::new();
-    let (mut len, mut slice) = (rlp_slice.len(), rlp_slice);
-    while len > 0 {
-        let matched = match_rlp(slice)?;
-        out.push(matched.0);
-        slice = matched.1;
-        len = matched.1.len();
-    }
-    trace!("Decoded: {:?}", out);
-    Ok(out)
-}
-
-fn match_rlp(rlp_slice: &[u8]) -> Result<(Rlp, &[u8]), RlpError> {
+pub(crate) fn next_rlp(rlp_slice: &[u8]) -> Result<(Rlp, &[u8]), RlpError> {
     let len = rlp_slice.len();
     if let (Some(rlp), slice) = match_empty(rlp_slice) {
         return Ok((rlp, slice));
@@ -46,6 +30,9 @@ fn match_rlp(rlp_slice: &[u8]) -> Result<(Rlp, &[u8]), RlpError> {
     if let (Some(rlp), slice) = match_long_list(rlp_slice, len)? {
         return Ok((rlp, slice));
     }
+    if rlp_slice.len() == 0 {
+        return Err(RlpError::EmptySlice);
+    }
     Err(RlpError::NoMatch)
 }
 
@@ -53,7 +40,7 @@ fn match_empty(rlp_slice: &[u8]) -> (Option<Rlp>, &[u8]) {
     if rlp_slice[0] == 0xc0 {
         (Some(Rlp::EmptyList), &rlp_slice[1..])
     } else if rlp_slice[0] == 0x80 {
-        (Some(Rlp::EmptyString), &rlp_slice[1..])
+        (Some(Rlp::Empty), &rlp_slice[1..])
     } else {
         (None, rlp_slice)
     }
@@ -70,9 +57,7 @@ fn match_byte(rlp_slice: &[u8]) -> (Option<Rlp>, &[u8]) {
 fn match_short_str(rlp_slice: &[u8], len: usize) -> (Option<Rlp>, &[u8]) {
     if rlp_slice[0] <= 0xb7 && len > (rlp_slice[0] - 0x80) as usize {
         (
-            Some(Rlp::Bytes(
-                rlp_slice[1..(rlp_slice[0] - 0x7f) as usize].to_vec(),
-            )),
+            Some(Rlp::Bytes(&rlp_slice[1..(rlp_slice[0] - 0x7f) as usize])),
             &rlp_slice[(rlp_slice[0] - 0x7f) as usize..],
         )
     } else {
@@ -89,10 +74,9 @@ fn match_long_str(rlp_slice: &[u8], len: usize) -> (Option<Rlp>, &[u8]) {
     {
         (
             Some(Rlp::Bytes(
-                rlp_slice[(rlp_slice[0] - 0xb6) as usize
+                &rlp_slice[(rlp_slice[0] - 0xb6) as usize
                     ..usize_from_u8(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
-                        + (rlp_slice[0] - 0xb6) as usize]
-                    .to_vec(),
+                        + (rlp_slice[0] - 0xb6) as usize],
             )),
             &rlp_slice[usize_from_u8(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
                 + (rlp_slice[0] - 0xb6) as usize..],
@@ -106,9 +90,7 @@ fn match_short_list(rlp_slice: &[u8], len: usize) -> Result<(Option<Rlp>, &[u8])
     Ok(
         if rlp_slice[0] <= 0xf7 && len > (rlp_slice[0] - 0xc0) as usize {
             (
-                Some(Rlp::List(decode(
-                    &rlp_slice[1..(rlp_slice[0] - 0xbf) as usize],
-                )?)),
+                Some(Rlp::List(&rlp_slice[1..(rlp_slice[0] - 0xbf) as usize])),
                 &rlp_slice[(rlp_slice[0] - 0xbf) as usize..],
             )
         } else {
@@ -125,11 +107,11 @@ fn match_long_list(rlp_slice: &[u8], len: usize) -> Result<(Option<Rlp>, &[u8]),
                     + usize_from_u8(&rlp_slice[1..(rlp_slice[0] - 0xf6) as usize])
         {
             (
-                Some(Rlp::List(decode(
+                Some(Rlp::List(
                     &rlp_slice[(rlp_slice[0] - 0xf6) as usize
                         ..usize_from_u8(&rlp_slice[1..(rlp_slice[0] - 0xf6) as usize])
                             + (rlp_slice[0] - 0xf6) as usize],
-                )?)),
+                )),
                 &rlp_slice[usize_from_u8(&rlp_slice[1..(rlp_slice[0] - 0xf6) as usize])
                     + (rlp_slice[0] - 0xf6) as usize..],
             )
@@ -152,6 +134,19 @@ fn usize_from_u8(input: &[u8]) -> usize {
 pub enum RlpError {
     #[error("No match found while parsing rlp slice")]
     NoMatch,
+    #[error("Input is empty")]
+    EmptySlice,
+    #[error("Error during RLP deserialization")]
+    CustomError(String),
+}
+
+impl serde::de::Error for RlpError {
+    fn custom<T>(msg: T) -> RlpError
+    where
+        T: std::fmt::Display,
+    {
+        RlpError::CustomError(msg.to_string())
+    }
 }
 
 #[cfg(test)]
@@ -188,7 +183,7 @@ mod tests {
             115, 178, 191, 63, 129, 146, 220, 89, 132, 46, 54, 247, 84, 136, 219, 130, 26, 119, 91,
             249, 218, 206,
         ];
-        let _rlp = decode(&vec[..]).unwrap();
+        let _rlp = next_rlp(&vec[..]).unwrap();
     }
 
     #[test]
@@ -209,10 +204,7 @@ mod tests {
         let third = vec![0x02_u8];
 
         assert_eq!(match_empty(&first[..]), (Some(Rlp::EmptyList), &first[1..]));
-        assert_eq!(
-            match_empty(&second[..]),
-            (Some(Rlp::EmptyString), &second[1..])
-        );
+        assert_eq!(match_empty(&second[..]), (Some(Rlp::Empty), &second[1..]));
         assert_eq!(match_empty(&third[..]), (None, &third[..]));
     }
 
@@ -231,7 +223,7 @@ mod tests {
 
         assert_eq!(
             match_short_str(&vec[..], vec.len()),
-            (Some(Rlp::Bytes(vec![b'c', b'a', b't'])), &vec[4..])
+            (Some(Rlp::Bytes(&[b'c', b'a', b't'])), &vec[4..])
         );
     }
 
@@ -243,7 +235,7 @@ mod tests {
 
         assert_eq!(
             match_long_str(&vec[..], vec.len()),
-            (Some(Rlp::Bytes(vec[2..172].to_vec())), &vec[172..])
+            (Some(Rlp::Bytes(&vec[2..172])), &vec[172..])
         );
     }
 
@@ -253,10 +245,7 @@ mod tests {
 
         assert_eq!(
             match_short_list(&vec[..], vec.len()).unwrap(),
-            (
-                Some(Rlp::List(vec![Rlp::EmptyList, Rlp::EmptyList])),
-                &vec[3..]
-            )
+            (Some(Rlp::List(&[0xc0_u8, 0xc0_u8])), &vec[3..])
         );
     }
 
@@ -268,7 +257,7 @@ mod tests {
 
         assert_eq!(
             match_long_list(&vec[..], vec.len()).unwrap(),
-            (Some(Rlp::List(vec![Rlp::EmptyList; 170])), &vec[172..])
+            (Some(Rlp::List(&[0xc0_u8; 170])), &vec[172..])
         );
     }
 }

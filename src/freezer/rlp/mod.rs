@@ -1,157 +1,158 @@
 use serde::Deserializer;
-use thiserror::Error;
 
 mod parse;
-pub use parse::{decode, Rlp, RlpError};
+use parse::{next_rlp, Rlp, RlpError};
 
-pub struct RlpDeserializer {
-    inner: Rlp,
+pub struct RlpDeserializer<'a> {
+    inner: &'a [u8],
 }
 
-impl RlpDeserializer {
-    pub fn new(rlp: Rlp) -> Self {
-        Self { inner: rlp }
+impl<'a> RlpDeserializer<'a> {
+    pub fn new(bytes: &'a [u8]) -> RlpDeserializer {
+        Self { inner: bytes }
     }
 
-    pub fn set(&mut self, rlp: Rlp) {
-        self.inner = rlp;
+    fn parse(&mut self) -> Result<Rlp, RlpError> {
+        let (rlp, rest) = next_rlp(self.inner)?;
+        self.inner = rest;
+        Ok(rlp)
     }
 }
 
-impl<'de> Deserializer<'de> for RlpDeserializer {
-    type Error = RlpDeserializerError;
+impl<'de> Deserializer<'de> for &'de mut RlpDeserializer<'de> {
+    type Error = RlpError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_unit_struct<V>(
@@ -162,7 +163,7 @@ impl<'de> Deserializer<'de> for RlpDeserializer {
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_newtype_struct<V>(
@@ -173,21 +174,21 @@ impl<'de> Deserializer<'de> for RlpDeserializer {
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_tuple_struct<V>(
@@ -199,14 +200,14 @@ impl<'de> Deserializer<'de> for RlpDeserializer {
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_struct<V>(
@@ -218,7 +219,8 @@ impl<'de> Deserializer<'de> for RlpDeserializer {
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        println!("CHECK DESERIALIZE_STRUCT");
+        visitor.visit_bytes(self.inner)
     }
 
     fn deserialize_enum<V>(
@@ -230,35 +232,20 @@ impl<'de> Deserializer<'de> for RlpDeserializer {
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
+        unimplemented!()
     }
 
     fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        todo!()
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum RlpDeserializerError {
-    #[error("Unexpected Item")]
-    UnexpectedItem,
-}
-
-impl serde::de::Error for RlpDeserializerError {
-    fn custom<T>(msg: T) -> Self
-    where
-        T: std::fmt::Display,
-    {
-        todo!()
+        unimplemented!()
     }
 }
