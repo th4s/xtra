@@ -1,9 +1,8 @@
 use num_bigint::BigUint;
-use serde::de::Visitor;
 use serde::Deserialize;
 
 // Header returned by subscription
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Header {
     pub parent_hash: [u8; 32],
     pub sha3_uncles: [u8; 32],
@@ -20,25 +19,6 @@ pub struct Header {
     pub extra_data: Vec<u8>,
     pub mix_hash: [u8; 32],
     pub nonce: [u8; 8],
-}
-
-impl<'de> Deserialize<'de> for Header {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        todo!()
-    }
-}
-
-struct HeaderVisitor;
-
-impl<'de> Visitor<'de> for HeaderVisitor {
-    type Value = Header;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(formatter, "an ethereum block header")
-    }
 }
 
 #[cfg(test)]
@@ -74,11 +54,5 @@ mod tests {
         ];
         let mut header_deserializer = RlpDeserializer::new(&test_header);
         let header = Header::deserialize(&mut header_deserializer).unwrap();
-        assert_eq!(
-            header,
-            Header {
-                ..Default::default()
-            }
-        );
     }
 }

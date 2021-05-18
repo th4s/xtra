@@ -10,6 +10,16 @@ pub(crate) enum Rlp<'a> {
     Empty,
 }
 
+impl<'a> Rlp<'a> {
+    pub fn inner_slice(&'a self) -> Result<&'a [u8], RlpError> {
+        match *self {
+            Rlp::Bytes(inner) => Ok(inner),
+            Rlp::List(inner) => Ok(inner),
+            _ => Err(RlpError::NoInnerSlice),
+        }
+    }
+}
+
 pub(crate) fn next_rlp(rlp_slice: &[u8]) -> Result<(Rlp, &[u8]), RlpError> {
     let len = rlp_slice.len();
     if let (Some(rlp), slice) = match_empty(rlp_slice) {
@@ -31,7 +41,7 @@ pub(crate) fn next_rlp(rlp_slice: &[u8]) -> Result<(Rlp, &[u8]), RlpError> {
         return Ok((rlp, slice));
     }
     if rlp_slice.len() == 0 {
-        return Err(RlpError::EmptySlice);
+        return Err(RlpError::NoInputLeft);
     }
     Err(RlpError::NoMatch)
 }
@@ -135,7 +145,9 @@ pub enum RlpError {
     #[error("No match found while parsing rlp slice")]
     NoMatch,
     #[error("Input is empty")]
-    EmptySlice,
+    NoInputLeft,
+    #[error("No inner slice present")]
+    NoInnerSlice,
     #[error("Error during RLP deserialization")]
     CustomError(String),
 }

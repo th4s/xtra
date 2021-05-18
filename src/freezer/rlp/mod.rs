@@ -1,25 +1,35 @@
+use serde::de::SeqAccess;
 use serde::Deserializer;
 
 mod parse;
 use parse::{next_rlp, Rlp, RlpError};
 
-pub struct RlpDeserializer<'a> {
-    inner: &'a [u8],
+pub struct RlpDeserializer<'de> {
+    inner: &'de [u8],
 }
 
-impl<'a> RlpDeserializer<'a> {
-    pub fn new(bytes: &'a [u8]) -> RlpDeserializer {
+struct MapAccessor<'a, 'de: 'a> {
+    de: &'a mut RlpDeserializer<'de>,
+}
+
+impl<'a, 'de: 'a> SeqAccess<'de> for MapAccessor<'a, 'de> {
+    type Error = RlpError;
+
+    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
+    where
+        T: serde::de::DeserializeSeed<'de>,
+    {
+        seed.deserialize(&mut *self.de).map(Some)
+    }
+}
+
+impl<'de> RlpDeserializer<'de> {
+    pub fn new(bytes: &'de [u8]) -> RlpDeserializer {
         Self { inner: bytes }
     }
-
-    fn parse(&mut self) -> Result<Rlp, RlpError> {
-        let (rlp, rest) = next_rlp(self.inner)?;
-        self.inner = rest;
-        Ok(rlp)
-    }
 }
 
-impl<'de> Deserializer<'de> for &'de mut RlpDeserializer<'de> {
+impl<'a, 'de: 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     type Error = RlpError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -181,13 +191,14 @@ impl<'de> Deserializer<'de> for &'de mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        unimplemented!()
+        visitor.visit_seq(MapAccessor { de: self })
     }
 
     fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
+        // visitor.visit_bytes()
         unimplemented!()
     }
 
@@ -219,8 +230,9 @@ impl<'de> Deserializer<'de> for &'de mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        println!("CHECK DESERIALIZE_STRUCT");
-        visitor.visit_bytes(self.inner)
+        let slice = next_rlp(self.inner)?.0.inner_slice()?;
+        self.inner = slice;
+        visitor.visit_seq(MapAccessor { de: self })
     }
 
     fn deserialize_enum<V>(
