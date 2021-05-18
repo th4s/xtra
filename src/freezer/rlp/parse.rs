@@ -10,17 +10,7 @@ pub(crate) enum Rlp<'a> {
     Empty,
 }
 
-impl<'a> Rlp<'a> {
-    pub fn inner_slice(&'a self) -> Result<&'a [u8], RlpError> {
-        match *self {
-            Rlp::Bytes(inner) => Ok(inner),
-            Rlp::List(inner) => Ok(inner),
-            _ => Err(RlpError::NoInnerSlice),
-        }
-    }
-}
-
-pub(crate) fn next_rlp(rlp_slice: &[u8]) -> Result<(Rlp, &[u8]), RlpError> {
+pub(crate) fn next_rlp<'a>(rlp_slice: &'a [u8]) -> Result<(Rlp<'a>, &'a [u8]), RlpError> {
     let len = rlp_slice.len();
     if let (Some(rlp), slice) = match_empty(rlp_slice) {
         return Ok((rlp, slice));

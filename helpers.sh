@@ -30,3 +30,7 @@ rbh() {
 wb() {
     dd if=$1 bs=1 skip=$2 count=$3
 }
+
+rbu() {
+    wb $1 $2 $3 | snzip -d -t raw -c | od -v -A d -t x1 --endian big 
+}
