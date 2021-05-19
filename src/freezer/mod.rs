@@ -357,8 +357,7 @@ mod tests {
     fn test_freezer_export_headers() {
         let path_buf = PathBuf::from("./tests/fixtures/headers");
         // Check if we can read some headers without errors
-        let headers = BlockPart::Headers.load(path_buf.as_path(), 1, 2).unwrap();
-        println!("{:?}", headers);
+        let headers = BlockPart::Headers.load(path_buf.as_path(), 0, 99).unwrap();
     }
 
     #[test]

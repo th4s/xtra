@@ -1,13 +1,34 @@
 use thiserror::Error;
 
 /// An enum RLP encoded bytes
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub(crate) enum Rlp<'a> {
     Bytes(&'a [u8]),
     List(&'a [u8]),
     Byte(u8),
     EmptyList,
     Empty,
+}
+
+impl<'a> Rlp<'a> {
+    pub fn inner(&self) -> Result<&[u8], RlpError> {
+        match *self {
+            Rlp::Bytes(inner) => Ok(inner),
+            Rlp::List(inner) => Ok(inner),
+            _ => Err(RlpError::NoInnerSlice),
+        }
+    }
+}
+impl<'a> std::fmt::Debug for Rlp<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Rlp::Bytes(inner) => write!(f, "Bytes(\n{:x?}\n)", &inner),
+            Rlp::List(inner) => write!(f, "List(\n{:x?}\n)", &inner),
+            Rlp::Byte(inner) => write!(f, "Byte({:02x})", inner),
+            Rlp::EmptyList => write!(f, "EmptyList"),
+            Rlp::Empty => write!(f, "Empty"),
+        }
+    }
 }
 
 pub(crate) fn next_rlp<'a>(rlp_slice: &'a [u8]) -> Result<(Rlp<'a>, &'a [u8]), RlpError> {

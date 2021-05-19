@@ -8,11 +8,11 @@ pub struct RlpDeserializer<'de> {
     inner: &'de [u8],
 }
 
-struct MapAccessor<'a, 'de: 'a> {
+struct SeqAccessor<'a, 'de: 'a> {
     de: &'a mut RlpDeserializer<'de>,
 }
 
-impl<'de, 'a> SeqAccess<'de> for MapAccessor<'a, 'de> {
+impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
     type Error = RlpError;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
@@ -35,7 +35,7 @@ impl<'de> RlpDeserializer<'de> {
     }
 }
 
-impl<'de, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
+impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     type Error = RlpError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -204,8 +204,14 @@ impl<'de, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        // visitor.visit_bytes()
-        unimplemented!()
+        let (rlp, _slice) = next_rlp(self.inner)?;
+        match rlp {
+            Rlp::Bytes(inner) => {
+                self.inner = inner;
+                visitor.visit_seq(SeqAccessor { de: self })
+            }
+            _ => Err(RlpError::NoInnerSlice),
+        }
     }
 
     fn deserialize_tuple_struct<V>(
@@ -240,7 +246,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         match rlp {
             Rlp::List(inner) => {
                 self.inner = inner;
-                visitor.visit_seq(MapAccessor { de: self })
+                visitor.visit_seq(SeqAccessor { de: self })
             }
             _ => Err(RlpError::NoInnerSlice),
         }
