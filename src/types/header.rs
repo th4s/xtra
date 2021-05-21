@@ -10,7 +10,7 @@ pub struct Header {
     pub state_root: [u8; 32],
     pub transactions_root: [u8; 32],
     pub receipts_root: [u8; 32],
-    pub logs_bloom: [u8; 32],
+    pub logs_bloom: Vec<u8>,
     pub difficulty: BigUint,
     pub number: BigUint,
     pub gas_limit: BigUint,

@@ -12,6 +12,7 @@ pub struct RlpDeserializer<'de> {
 
 struct SeqAccessor<'a, 'de: 'a> {
     de: &'a mut RlpDeserializer<'de>,
+    len: Option<usize>,
 }
 
 impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
@@ -21,8 +22,13 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
     where
         T: serde::de::DeserializeSeed<'de>,
     {
+        dbg!(&self.de.rlp_stack);
         if let Err(RlpError::NoInputLeft) = self.de.parse() {
-            return Ok(None);
+            self.de.rlp_stack.pop().ok_or(RlpError::NoInputLeft)?;
+            if self.len == Some(0) {
+                return Ok(None);
+            }
+            self.de.parse()?;
         }
         seed.deserialize(&mut *self.de).map(Some)
     }
@@ -229,14 +235,21 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        visitor.visit_seq(SeqAccessor { de: self })
+        visitor.visit_seq(SeqAccessor {
+            de: self,
+            len: None,
+        })
     }
 
     fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        self.deserialize_seq(visitor)
+        println!("TUPLE WITH LENGTH {}", len);
+        visitor.visit_seq(SeqAccessor {
+            de: self,
+            len: Some(len),
+        })
     }
 
     fn deserialize_tuple_struct<V>(
@@ -268,7 +281,10 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         V: serde::de::Visitor<'de>,
     {
         self.parse()?;
-        visitor.visit_seq(SeqAccessor { de: self })
+        visitor.visit_seq(SeqAccessor {
+            de: self,
+            len: Some(fields.len()),
+        })
     }
 
     fn deserialize_enum<V>(
