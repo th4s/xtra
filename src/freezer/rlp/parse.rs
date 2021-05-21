@@ -5,20 +5,11 @@ use thiserror::Error;
 pub(crate) enum Rlp<'a> {
     Bytes(&'a [u8]),
     List(&'a [u8]),
-    Byte(u8),
+    Byte(&'a u8),
     EmptyList,
     Empty,
 }
 
-impl<'a> Rlp<'a> {
-    pub fn inner(&self) -> Result<&[u8], RlpError> {
-        match *self {
-            Rlp::Bytes(inner) => Ok(inner),
-            Rlp::List(inner) => Ok(inner),
-            _ => Err(RlpError::NoInnerSlice),
-        }
-    }
-}
 impl<'a> std::fmt::Debug for Rlp<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
@@ -33,6 +24,9 @@ impl<'a> std::fmt::Debug for Rlp<'a> {
 
 pub(crate) fn next_rlp<'a>(rlp_slice: &'a [u8]) -> Result<(Rlp<'a>, &'a [u8]), RlpError> {
     let len = rlp_slice.len();
+    if len == 0 {
+        return Err(RlpError::NoInputLeft);
+    }
     if let (Some(rlp), slice) = match_empty(rlp_slice) {
         return Ok((rlp, slice));
     }
@@ -51,9 +45,6 @@ pub(crate) fn next_rlp<'a>(rlp_slice: &'a [u8]) -> Result<(Rlp<'a>, &'a [u8]), R
     if let (Some(rlp), slice) = match_long_list(rlp_slice, len)? {
         return Ok((rlp, slice));
     }
-    if rlp_slice.len() == 0 {
-        return Err(RlpError::NoInputLeft);
-    }
     Err(RlpError::NoMatch)
 }
 
@@ -69,7 +60,7 @@ fn match_empty(rlp_slice: &[u8]) -> (Option<Rlp>, &[u8]) {
 
 fn match_byte(rlp_slice: &[u8]) -> (Option<Rlp>, &[u8]) {
     if rlp_slice[0] <= 0x7f {
-        (Some(Rlp::Byte(rlp_slice[0])), &rlp_slice[1..])
+        (Some(Rlp::Byte(&rlp_slice[0])), &rlp_slice[1..])
     } else {
         (None, rlp_slice)
     }
@@ -157,9 +148,9 @@ pub enum RlpError {
     NoMatch,
     #[error("Input is empty")]
     NoInputLeft,
-    #[error("No inner slice present")]
-    NoInnerSlice,
-    #[error("Error during RLP deserialization")]
+    #[error("Unexptected match")]
+    UnexpectedMatch,
+    #[error("Error during RLP deserialization: {0}")]
     CustomError(String),
 }
 
@@ -236,7 +227,10 @@ mod tests {
         let first = vec![0x1b_u8];
         let second = vec![0x80_u8];
 
-        assert_eq!(match_byte(&first[..]), (Some(Rlp::Byte(0x1b)), &first[1..]));
+        assert_eq!(
+            match_byte(&first[..]),
+            (Some(Rlp::Byte(&0x1b)), &first[1..])
+        );
         assert_eq!(match_byte(&second[..]), (None, &second[..]));
     }
 

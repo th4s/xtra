@@ -4,8 +4,10 @@ use serde::Deserializer;
 mod parse;
 use parse::{next_rlp, Rlp, RlpError};
 
+#[derive(Debug)]
 pub struct RlpDeserializer<'de> {
-    inner: &'de [u8],
+    rlp_stack: Vec<Rlp<'de>>,
+    slice: &'de [u8],
 }
 
 struct SeqAccessor<'a, 'de: 'a> {
@@ -19,19 +21,46 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
     where
         T: serde::de::DeserializeSeed<'de>,
     {
+        if let Err(RlpError::NoInputLeft) = self.de.parse() {
+            return Ok(None);
+        }
         seed.deserialize(&mut *self.de).map(Some)
     }
 }
 
 impl<'de> RlpDeserializer<'de> {
-    pub fn new(bytes: &'de [u8]) -> RlpDeserializer {
-        Self { inner: bytes }
+    pub fn new(bytes: &'de [u8]) -> Result<RlpDeserializer, RlpError> {
+        let rlp_deserializer = RlpDeserializer {
+            rlp_stack: vec![],
+            slice: bytes,
+        };
+        Ok(rlp_deserializer)
     }
 
-    fn parse(&mut self) -> Result<Rlp, RlpError> {
-        let (rlp, slice) = next_rlp(self.inner)?;
-        self.inner = slice;
-        Ok(rlp)
+    fn parse(&mut self) -> Result<(), RlpError> {
+        if let Some(last_element) = self.rlp_stack.last_mut() {
+            if let Rlp::List(inner) = last_element {
+                let (parsed, slice) = next_rlp(inner)?;
+                *last_element = Rlp::List(slice);
+                self.rlp_stack.push(parsed);
+                return Ok(());
+            }
+
+            if let Rlp::Bytes(inner) = last_element {
+                let (first, rest) = inner.split_first().ok_or(RlpError::NoInputLeft)?;
+                *last_element = Rlp::Bytes(rest);
+                self.rlp_stack.push(Rlp::Byte(first));
+                return Ok(());
+            }
+        }
+        let (parsed, slice) = next_rlp(self.slice)?;
+        self.rlp_stack.push(parsed);
+        self.slice = slice;
+        Ok(())
+    }
+
+    fn eat(&mut self) -> Result<Rlp, RlpError> {
+        self.rlp_stack.pop().ok_or(RlpError::NoInputLeft)
     }
 }
 
@@ -84,7 +113,10 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        unimplemented!()
+        if let Rlp::Byte(byte) = self.eat()? {
+            return visitor.visit_u8(*byte);
+        }
+        Err(RlpError::UnexpectedMatch)
     }
 
     fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -197,21 +229,14 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        unimplemented!()
+        visitor.visit_seq(SeqAccessor { de: self })
     }
 
     fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
     {
-        let (rlp, _slice) = next_rlp(self.inner)?;
-        match rlp {
-            Rlp::Bytes(inner) => {
-                self.inner = inner;
-                visitor.visit_seq(SeqAccessor { de: self })
-            }
-            _ => Err(RlpError::NoInnerSlice),
-        }
+        self.deserialize_seq(visitor)
     }
 
     fn deserialize_tuple_struct<V>(
@@ -242,14 +267,8 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        let (rlp, _slice) = next_rlp(self.inner)?;
-        match rlp {
-            Rlp::List(inner) => {
-                self.inner = inner;
-                visitor.visit_seq(SeqAccessor { de: self })
-            }
-            _ => Err(RlpError::NoInnerSlice),
-        }
+        self.parse()?;
+        visitor.visit_seq(SeqAccessor { de: self })
     }
 
     fn deserialize_enum<V>(
