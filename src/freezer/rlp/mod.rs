@@ -23,29 +23,22 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
     where
         T: serde::de::DeserializeSeed<'de>,
     {
-        if let None = self.size_hint() {
-            self.len = self.de.last_element_len().map(Some)?;
-        }
-
-        if let Some(len) = self.size_hint() {
+        self.len = self.de.last_element_len().map(Some)?;
+        println!(
+            "SEQACCESS with len {:?} and {:?}",
+            self.len, self.de.rlp_stack
+        );
+        if let Some(len) = self.len {
             if len > 0 {
-                println!(
-                    "BEFORE NEXT IN ITERATOR length: {:?}, stack: {:?}",
-                    &self.size_hint(),
-                    &self.de.rlp_stack
-                );
                 self.len = Some(len - 1);
-                self.de.next()?;
+                return seed.deserialize(&mut *self.de).map(Some);
             } else {
+                self.de.pop_stack()?;
                 println!("RETURNED NONE IN SEQUENCE");
                 return Ok(None);
             }
         }
-        seed.deserialize(&mut *self.de).map(Some)
-    }
-
-    fn size_hint(&self) -> Option<usize> {
-        self.len
+        Err(RlpError::NoSizeHint)
     }
 }
 
@@ -59,6 +52,7 @@ impl<'de> RlpDeserializer<'de> {
     }
 
     fn next(&mut self) -> Result<(), RlpError> {
+        println!("NEXT on {:?}", self.rlp_stack);
         if let Some(last_element) = self.rlp_stack.last_mut() {
             if let Rlp::List(inner) = last_element {
                 let (parsed, slice) = parse(inner)?;
@@ -71,16 +65,16 @@ impl<'de> RlpDeserializer<'de> {
                 return Ok(());
             }
 
-            if let Rlp::Bytes(inner) = last_element {
-                let (first, rest) = inner.split_first().ok_or(RlpError::NoInputLeft)?;
-                if rest.is_empty() {
-                    self.rlp_stack.pop();
-                } else {
-                    *last_element = Rlp::Bytes(rest);
-                }
-                self.rlp_stack.push(Rlp::Byte(first));
-                return Ok(());
-            }
+            //if let Rlp::Bytes(inner) = last_element {
+            //    let (first, rest) = inner.split_first().ok_or(RlpError::NoInputLeft)?;
+            //    if rest.is_empty() {
+            //        self.rlp_stack.pop();
+            //    } else {
+            //        *last_element = Rlp::Bytes(rest);
+            //    }
+            //    self.rlp_stack.push(Rlp::Byte(first));
+            //    return Ok(());
+            //}
         }
         let (parsed, slice) = parse(self.slice)?;
         self.rlp_stack.push(parsed);
@@ -88,7 +82,7 @@ impl<'de> RlpDeserializer<'de> {
         Ok(())
     }
 
-    fn eat(&mut self) -> Result<Rlp, RlpError> {
+    fn pop_stack(&mut self) -> Result<Rlp, RlpError> {
         self.rlp_stack.pop().ok_or(RlpError::NoInputLeft)
     }
 
@@ -153,9 +147,15 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        match self.eat()? {
-            Rlp::Byte(byte) => visitor.visit_u8(*byte),
-            Rlp::Empty => visitor.visit_u8(0),
+        match self.rlp_stack.last_mut() {
+            Some(Rlp::Empty) => visitor.visit_u8(0),
+            Some(Rlp::Byte(byte)) => visitor.visit_u8(**byte),
+            Some(Rlp::Bytes(bytes)) => {
+                println!("bytes {:?}", bytes);
+                let byte = bytes[0];
+                *bytes = &bytes[1..];
+                visitor.visit_u8(byte)
+            }
             _ => Err(RlpError::UnexpectedMatch),
         }
     }
@@ -172,7 +172,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         V: serde::de::Visitor<'de>,
     {
         let value = self.rlp_stack.last_mut();
-        println!("{:?}", value);
+        println!("DesU32 {:?}", value);
         if let Some(Rlp::Bytes(bytes)) = value {
             let (u32_bytes, _) = bytes.split_at(4);
             let des_u32 =
@@ -292,9 +292,10 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         V: serde::de::Visitor<'de>,
     {
         println!("TUPLE WITH LENGTH {}", len);
+        self.next()?;
         visitor.visit_seq(SeqAccessor {
             de: self,
-            len: Some(len),
+            len: None,
         })
     }
 
