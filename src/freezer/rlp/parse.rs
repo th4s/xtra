@@ -22,7 +22,7 @@ impl<'a> std::fmt::Debug for Rlp<'a> {
     }
 }
 
-pub(crate) fn next_rlp<'a>(rlp_slice: &'a [u8]) -> Result<(Rlp<'a>, &'a [u8]), RlpError> {
+pub(crate) fn parse<'a>(rlp_slice: &'a [u8]) -> Result<(Rlp<'a>, &'a [u8]), RlpError> {
     let len = rlp_slice.len();
     if len == 0 {
         return Err(RlpError::NoInputLeft);
@@ -150,6 +150,8 @@ pub enum RlpError {
     NoInputLeft,
     #[error("Unexptected match")]
     UnexpectedMatch,
+    #[error("Cannot obtain size hint")]
+    NoSizeHint,
     #[error("Error during RLP deserialization: {0}")]
     CustomError(String),
 }
@@ -197,7 +199,7 @@ mod tests {
             115, 178, 191, 63, 129, 146, 220, 89, 132, 46, 54, 247, 84, 136, 219, 130, 26, 119, 91,
             249, 218, 206,
         ];
-        let _rlp = next_rlp(&vec[..]).unwrap();
+        let _rlp = parse(&vec[..]).unwrap();
     }
 
     #[test]
