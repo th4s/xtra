@@ -152,6 +152,8 @@ pub enum RlpError {
     UnexpectedMatch,
     #[error("Cannot obtain size hint")]
     NoSizeHint,
+    #[error("Type conversion error")]
+    Conversion,
     #[error("Error during RLP deserialization: {0}")]
     CustomError(String),
 }

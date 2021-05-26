@@ -1,5 +1,6 @@
 use serde::de::SeqAccess;
 use serde::Deserializer;
+use std::convert::TryInto;
 
 mod parse;
 use parse::{parse, Rlp, RlpError};
@@ -152,9 +153,6 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        if let Some(Rlp::Bytes(_)) = self.rlp_stack.last() {
-            self.next()?;
-        }
         match self.eat()? {
             Rlp::Byte(byte) => visitor.visit_u8(*byte),
             Rlp::Empty => visitor.visit_u8(0),
@@ -173,7 +171,17 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        unimplemented!()
+        let value = self.rlp_stack.last_mut();
+        println!("{:?}", value);
+        if let Some(Rlp::Bytes(bytes)) = value {
+            let (u32_bytes, _) = bytes.split_at(4);
+            let des_u32 =
+                u32::from_be_bytes(u32_bytes.try_into().map_err(|_| RlpError::Conversion)?);
+            *bytes = &bytes[4..];
+            println!("{:?}\n{:?}\n{}", value, u32_bytes, des_u32);
+            return visitor.visit_u32(des_u32);
+        }
+        Err(RlpError::UnexpectedMatch)
     }
 
     fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
