@@ -30,14 +30,10 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
 
         if let Some(len) = self.size_hint() {
             if len > 0 {
-                //println!(
-                //    "BEFORE NEXT IN ITERATOR length: {:?}, stack: {:?}",
-                //    &self.size_hint(),
-                //    &self.de.rlp_stack
-                //);
                 self.len = Some(len - 1);
                 self.de.next()?;
             } else {
+                println!("{:?}", self.de.rlp_stack);
                 println!("RETURNED NONE IN SEQUENCE");
                 return Ok(None);
             }
