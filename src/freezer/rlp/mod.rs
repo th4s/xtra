@@ -13,7 +13,7 @@ pub struct RlpDeserializer<'de> {
 
 struct SeqAccessor<'a, 'de: 'a> {
     de: &'a mut RlpDeserializer<'de>,
-    len: Option<usize>,
+    dynamic: bool,
 }
 
 impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
@@ -23,25 +23,17 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
     where
         T: serde::de::DeserializeSeed<'de>,
     {
-        println!("next_element_seed");
+        println!("\nnext_element_seed: {:?}", self.de.rlp_stack);
         println!("seed type {}", std::any::type_name::<T>());
-        self.len = self.de.last_element_len().map(Some)?;
-        //   println!(
-        //       "SEQACCESS with len {:?} and {:?}",
-        //       self.len, self.de.rlp_stack
-        //   );
-        if let Some(len) = self.len {
-            if len > 0 {
-                self.len = Some(len - 1);
-                return seed.deserialize(&mut *self.de).map(Some);
-            } else {
-                self.de.pop_stack()?;
+        if self.de.last_element_len()? == 0 {
+            self.de.pop_stack()?;
+            if self.dynamic {
                 println!("{:?}", self.de.rlp_stack);
                 println!("RETURNED NONE IN SEQUENCE");
                 return Ok(None);
             }
         }
-        Err(RlpError::NoSizeHint)
+        seed.deserialize(&mut *self.de).map(Some)
     }
 }
 
@@ -55,29 +47,13 @@ impl<'de> RlpDeserializer<'de> {
     }
 
     fn next(&mut self) -> Result<(), RlpError> {
-        println!("NEXT on {:?}", self.rlp_stack);
         if let Some(last_element) = self.rlp_stack.last_mut() {
             if let Rlp::List(inner) = last_element {
                 let (parsed, slice) = parse(inner)?;
-                if slice.is_empty() {
-                    self.rlp_stack.pop();
-                } else {
-                    *last_element = Rlp::List(slice);
-                }
+                *inner = &slice;
                 self.rlp_stack.push(parsed);
                 return Ok(());
             }
-
-            //if let Rlp::Bytes(inner) = last_element {
-            //    let (first, rest) = inner.split_first().ok_or(RlpError::NoInputLeft)?;
-            //    if rest.is_empty() {
-            //        self.rlp_stack.pop();
-            //    } else {
-            //        *last_element = Rlp::Bytes(rest);
-            //    }
-            //    self.rlp_stack.push(Rlp::Byte(first));
-            //    return Ok(());
-            //}
         }
         let (parsed, slice) = parse(self.slice)?;
         self.rlp_stack.push(parsed);
@@ -176,15 +152,13 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         V: serde::de::Visitor<'de>,
     {
         println!("deserialize_u32");
-        let value = self.rlp_stack.last_mut();
-        println!("DesU32 {:?}", value);
-        if let Some(Rlp::Bytes(bytes)) = value {
-            let (u32_bytes, _) = bytes.split_at(4);
-            let des_u32 =
-                u32::from_be_bytes(u32_bytes.try_into().map_err(|_| RlpError::Conversion)?);
-            *bytes = &bytes[4..];
-            println!("{:?}\n{:?}\n{}", value, u32_bytes, des_u32);
-            return visitor.visit_u32(des_u32);
+        if let Some(Rlp::Bytes(bytes)) = self.rlp_stack.last_mut() {
+            let mut chunk_bytes = bytes.chunks(4).rev().next().ok_or(RlpError::Conversion)?;
+            let chunk_len = chunk_bytes.len();
+            *bytes = &bytes[chunk_len..];
+            let new_u32 =
+                u32::from_be_bytes(chunk_bytes.try_into().map_err(|_| RlpError::Conversion)?);
+            return visitor.visit_u32(new_u32);
         }
         Err(RlpError::UnexpectedMatch)
     }
@@ -286,9 +260,10 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         V: serde::de::Visitor<'de>,
     {
         println!("deserialize_seq");
+        self.next()?;
         visitor.visit_seq(SeqAccessor {
             de: self,
-            len: None,
+            dynamic: true,
         })
     }
 
@@ -300,7 +275,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         self.next()?;
         visitor.visit_seq(SeqAccessor {
             de: self,
-            len: None,
+            dynamic: false,
         })
     }
 
@@ -336,7 +311,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         self.next()?;
         visitor.visit_seq(SeqAccessor {
             de: self,
-            len: Some(fields.len()),
+            dynamic: false,
         })
     }
 
