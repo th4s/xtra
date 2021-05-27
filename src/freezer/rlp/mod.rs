@@ -24,6 +24,7 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
         T: serde::de::DeserializeSeed<'de>,
     {
         println!("next_element_seed");
+        println!("seed type {}", std::any::type_name::<T>());
         self.len = self.de.last_element_len().map(Some)?;
         //   println!(
         //       "SEQACCESS with len {:?} and {:?}",
