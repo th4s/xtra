@@ -23,6 +23,7 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
     where
         T: serde::de::DeserializeSeed<'de>,
     {
+        println!("next_element_seed");
         self.len = self.de.last_element_len().map(Some)?;
         println!(
             "SEQACCESS with len {:?} and {:?}",
@@ -147,11 +148,12 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
+        println!("deserialize_u8");
         match self.rlp_stack.last_mut() {
             Some(Rlp::Empty) => visitor.visit_u8(0),
             Some(Rlp::Byte(byte)) => visitor.visit_u8(**byte),
             Some(Rlp::Bytes(bytes)) => {
-                println!("bytes {:?}", bytes);
+                // println!("bytes {:?}", bytes);
                 let byte = bytes[0];
                 *bytes = &bytes[1..];
                 visitor.visit_u8(byte)
@@ -171,6 +173,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
+        println!("deserialize_u32");
         let value = self.rlp_stack.last_mut();
         println!("DesU32 {:?}", value);
         if let Some(Rlp::Bytes(bytes)) = value {
@@ -280,7 +283,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        println!("SEQUENCE WITH UNKNOWN LENGTH");
+        println!("deserialize_seq");
         visitor.visit_seq(SeqAccessor {
             de: self,
             len: None,
@@ -291,7 +294,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        println!("TUPLE WITH LENGTH {}", len);
+        println!("deserialize_tuple with length {}", len);
         self.next()?;
         visitor.visit_seq(SeqAccessor {
             de: self,
@@ -327,8 +330,8 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
+        println!("deserialize_struct {}", name);
         self.next()?;
-        println!("STRUCT COMING");
         visitor.visit_seq(SeqAccessor {
             de: self,
             len: Some(fields.len()),
