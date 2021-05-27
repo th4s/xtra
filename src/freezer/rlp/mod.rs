@@ -24,6 +24,7 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
         T: serde::de::DeserializeSeed<'de>,
     {
         println!("next_element_seed");
+        println!("seed type {}", std::any::type_name::<T>());
         if let None = self.size_hint() {
             self.len = self.de.last_element_len().map(Some)?;
         }
@@ -56,6 +57,7 @@ impl<'de> RlpDeserializer<'de> {
     }
 
     fn next(&mut self) -> Result<(), RlpError> {
+        println!("NEXT ON {:?}", self.rlp_stack);
         if let Some(last_element) = self.rlp_stack.last_mut() {
             if let Rlp::List(inner) = last_element {
                 let (parsed, slice) = parse(inner)?;
