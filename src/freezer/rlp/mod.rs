@@ -25,16 +25,17 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
     {
         println!("next_element_seed");
         self.len = self.de.last_element_len().map(Some)?;
-        println!(
-            "SEQACCESS with len {:?} and {:?}",
-            self.len, self.de.rlp_stack
-        );
+        //   println!(
+        //       "SEQACCESS with len {:?} and {:?}",
+        //       self.len, self.de.rlp_stack
+        //   );
         if let Some(len) = self.len {
             if len > 0 {
                 self.len = Some(len - 1);
                 return seed.deserialize(&mut *self.de).map(Some);
             } else {
                 self.de.pop_stack()?;
+                println!("{:?}", self.de.rlp_stack);
                 println!("RETURNED NONE IN SEQUENCE");
                 return Ok(None);
             }
