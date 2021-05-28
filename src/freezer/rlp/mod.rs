@@ -1,6 +1,6 @@
+use crate::helper::{u32_from_bytes_end_be, u64_from_bytes_end_be};
 use serde::de::SeqAccess;
 use serde::Deserializer;
-use std::convert::TryInto;
 
 mod parse;
 use parse::{parse, Rlp, RlpError};
@@ -70,7 +70,8 @@ impl<'de> RlpDeserializer<'de> {
             return match last {
                 Rlp::Bytes(inner) => Ok(inner.len()),
                 Rlp::List(inner) => Ok(inner.len()),
-                _ => Err(RlpError::NoSizeHint),
+                Rlp::Empty => Ok(1),
+                Rlp::EmptyList => Ok(1),
             };
         }
         Err(RlpError::NoSizeHint)
@@ -129,7 +130,6 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         println!("deserialize_u8");
         match self.rlp_stack.last_mut() {
             Some(Rlp::Empty) => visitor.visit_u8(0),
-            Some(Rlp::Byte(byte)) => visitor.visit_u8(**byte),
             Some(Rlp::Bytes(bytes)) => {
                 // println!("bytes {:?}", bytes);
                 let byte = bytes[0];
@@ -153,12 +153,13 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     {
         println!("deserialize_u32");
         if let Some(Rlp::Bytes(bytes)) = self.rlp_stack.last_mut() {
-            let mut chunk_bytes = bytes.chunks(4).rev().next().ok_or(RlpError::Conversion)?;
-            let chunk_len = chunk_bytes.len();
-            *bytes = &bytes[chunk_len..];
-            let new_u32 =
-                u32::from_be_bytes(chunk_bytes.try_into().map_err(|_| RlpError::Conversion)?);
+            let new_u32 = u32_from_bytes_end_be(&bytes).map_err(RlpError::Conversion)?;
+            *bytes = &bytes[..bytes.len().checked_sub(4).unwrap_or(0)];
             return visitor.visit_u32(new_u32);
+        }
+        if let Some(empty @ Rlp::Empty) = self.rlp_stack.last_mut() {
+            *empty = Rlp::Bytes(&[]);
+            return visitor.visit_u32(0);
         }
         Err(RlpError::UnexpectedMatch)
     }
@@ -167,7 +168,18 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        unimplemented!()
+        println!("deserialize_u64");
+        self.next()?;
+        if let Some(Rlp::Bytes(bytes)) = self.rlp_stack.last_mut() {
+            let new_u64 = u64_from_bytes_end_be(&bytes).map_err(RlpError::Conversion)?;
+            *bytes = &bytes[..bytes.len().checked_sub(8).unwrap_or(0)];
+            return visitor.visit_u64(new_u64);
+        }
+        if let Some(empty @ Rlp::Empty) = self.rlp_stack.last_mut() {
+            *empty = Rlp::Bytes(&[]);
+            return visitor.visit_u64(0);
+        }
+        Err(RlpError::UnexpectedMatch)
     }
 
     fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value, Self::Error>

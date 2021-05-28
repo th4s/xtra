@@ -1,3 +1,4 @@
+use crate::helper::{usize_from_bytes_be, NumericError};
 use thiserror::Error;
 
 /// An enum RLP encoded bytes
@@ -5,7 +6,6 @@ use thiserror::Error;
 pub(crate) enum Rlp<'a> {
     Bytes(&'a [u8]),
     List(&'a [u8]),
-    Byte(&'a u8),
     EmptyList,
     Empty,
 }
@@ -15,7 +15,6 @@ impl<'a> std::fmt::Debug for Rlp<'a> {
         match *self {
             Rlp::Bytes(inner) => write!(f, "Bytes(\n{:x?}\n)", &inner),
             Rlp::List(inner) => write!(f, "List(\n{:x?}\n)", &inner),
-            Rlp::Byte(inner) => write!(f, "Byte({:02x})", inner),
             Rlp::EmptyList => write!(f, "EmptyList"),
             Rlp::Empty => write!(f, "Empty"),
         }
@@ -36,7 +35,7 @@ pub(crate) fn parse<'a>(rlp_slice: &'a [u8]) -> Result<(Rlp<'a>, &'a [u8]), RlpE
     if let (Some(rlp), slice) = match_short_str(rlp_slice, len) {
         return Ok((rlp, slice));
     }
-    if let (Some(rlp), slice) = match_long_str(rlp_slice, len) {
+    if let (Some(rlp), slice) = match_long_str(rlp_slice, len)? {
         return Ok((rlp, slice));
     }
     if let (Some(rlp), slice) = match_short_list(rlp_slice, len)? {
@@ -60,7 +59,7 @@ fn match_empty(rlp_slice: &[u8]) -> (Option<Rlp>, &[u8]) {
 
 fn match_byte(rlp_slice: &[u8]) -> (Option<Rlp>, &[u8]) {
     if rlp_slice[0] <= 0x7f {
-        (Some(Rlp::Byte(&rlp_slice[0])), &rlp_slice[1..])
+        (Some(Rlp::Bytes(&rlp_slice[..1])), &rlp_slice[1..])
     } else {
         (None, rlp_slice)
     }
@@ -77,24 +76,27 @@ fn match_short_str(rlp_slice: &[u8], len: usize) -> (Option<Rlp>, &[u8]) {
     }
 }
 
-fn match_long_str(rlp_slice: &[u8], len: usize) -> (Option<Rlp>, &[u8]) {
+fn match_long_str(rlp_slice: &[u8], len: usize) -> Result<(Option<Rlp>, &[u8]), RlpError> {
     if rlp_slice[0] <= 0xbf
         && len > (rlp_slice[0] - 0xb7) as usize
         && len
             > (rlp_slice[0] - 0xb7) as usize
-                + usize_from_u8(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
+                + usize_from_bytes_be(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
+                    .map_err(RlpError::Conversion)?
     {
-        (
+        Ok((
             Some(Rlp::Bytes(
                 &rlp_slice[(rlp_slice[0] - 0xb6) as usize
-                    ..usize_from_u8(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
+                    ..usize_from_bytes_be(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
+                        .map_err(RlpError::Conversion)?
                         + (rlp_slice[0] - 0xb6) as usize],
             )),
-            &rlp_slice[usize_from_u8(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
+            &rlp_slice[usize_from_bytes_be(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
+                .map_err(RlpError::Conversion)?
                 + (rlp_slice[0] - 0xb6) as usize..],
-        )
+        ))
     } else {
-        (None, rlp_slice)
+        Ok((None, rlp_slice))
     }
 }
 
@@ -116,29 +118,24 @@ fn match_long_list(rlp_slice: &[u8], len: usize) -> Result<(Option<Rlp>, &[u8]),
         if len > (rlp_slice[0] - 0xf7) as usize
             && len
                 > (rlp_slice[0] - 0xf7) as usize
-                    + usize_from_u8(&rlp_slice[1..(rlp_slice[0] - 0xf6) as usize])
+                    + usize_from_bytes_be(&rlp_slice[1..(rlp_slice[0] - 0xf6) as usize])
+                        .map_err(RlpError::Conversion)?
         {
             (
                 Some(Rlp::List(
                     &rlp_slice[(rlp_slice[0] - 0xf6) as usize
-                        ..usize_from_u8(&rlp_slice[1..(rlp_slice[0] - 0xf6) as usize])
+                        ..usize_from_bytes_be(&rlp_slice[1..(rlp_slice[0] - 0xf6) as usize])
+                            .map_err(RlpError::Conversion)?
                             + (rlp_slice[0] - 0xf6) as usize],
                 )),
-                &rlp_slice[usize_from_u8(&rlp_slice[1..(rlp_slice[0] - 0xf6) as usize])
+                &rlp_slice[usize_from_bytes_be(&rlp_slice[1..(rlp_slice[0] - 0xf6) as usize])
+                    .map_err(RlpError::Conversion)?
                     + (rlp_slice[0] - 0xf6) as usize..],
             )
         } else {
             (None, rlp_slice)
         },
     )
-}
-
-fn usize_from_u8(input: &[u8]) -> usize {
-    let len = input.len();
-    let out = input.iter().enumerate().fold(0_usize, |acc, (i, el)| {
-        acc + 256_usize.pow((len - 1 - i) as u32) * (*el as usize)
-    });
-    out
 }
 
 /// Enum for collecting RLP errors
@@ -152,8 +149,8 @@ pub enum RlpError {
     UnexpectedMatch,
     #[error("Cannot obtain size hint")]
     NoSizeHint,
-    #[error("Type conversion error")]
-    Conversion,
+    #[error("Type conversion error: {0}")]
+    Conversion(#[source] NumericError),
     #[error("Error during RLP deserialization: {0}")]
     CustomError(String),
 }
@@ -205,17 +202,6 @@ mod tests {
     }
 
     #[test]
-    fn test_rlp_u8_from_usize() {
-        let first = vec![0_u8];
-        let second = vec![0xff_u8];
-        let third = vec![0x2a_u8, 0xac_u8];
-
-        assert_eq!(usize_from_u8(&first[..]), 0_usize);
-        assert_eq!(usize_from_u8(&second[..]), 255_usize);
-        assert_eq!(usize_from_u8(&third[..]), 10924_usize);
-    }
-
-    #[test]
     fn test_rlp_match_empty() {
         let first = vec![0xc0_u8];
         let second = vec![0x80_u8];
@@ -233,7 +219,7 @@ mod tests {
 
         assert_eq!(
             match_byte(&first[..]),
-            (Some(Rlp::Byte(&0x1b)), &first[1..])
+            (Some(Rlp::Bytes(&[0x1b])), &first[1..])
         );
         assert_eq!(match_byte(&second[..]), (None, &second[..]));
     }
@@ -255,7 +241,7 @@ mod tests {
         vec.push(b'X');
 
         assert_eq!(
-            match_long_str(&vec[..], vec.len()),
+            match_long_str(&vec[..], vec.len()).unwrap(),
             (Some(Rlp::Bytes(&vec[2..172])), &vec[172..])
         );
     }

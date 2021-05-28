@@ -70,5 +70,6 @@ mod tests {
         ];
         let mut header_deserializer = RlpDeserializer::new(&test_header).unwrap();
         let header = Header::deserialize(&mut header_deserializer).unwrap();
+        println!("{:?}", header);
     }
 }
