@@ -2,7 +2,8 @@ use std::array::TryFromSliceError;
 use std::convert::TryFrom;
 use thiserror::Error;
 
-/// Converts the first n bytes of a slice into usize. Uses padding if necessary.
+/// Converts the first n big endian bytes of a slice into usize
+/// Uses padding if necessary
 pub fn usize_from_bytes_be(input: &[u8]) -> Result<usize, NumericError> {
     const SIZE_OF_USIZE: usize = std::mem::size_of::<usize>();
     let input_len = input.len();
@@ -19,7 +20,8 @@ pub fn usize_from_bytes_be(input: &[u8]) -> Result<usize, NumericError> {
     Ok(out)
 }
 
-/// Converts the last 4 bytes of a slice from left to right into a u32. Uses padding if necessary
+/// Converts the last 4 bytes of a slice from left to right into a u32
+/// Uses padding if necessary
 pub fn u32_from_bytes_end_be(input: &[u8]) -> Result<u32, NumericError> {
     let input_len = input.len();
     let input = match input_len {
@@ -34,6 +36,8 @@ pub fn u32_from_bytes_end_be(input: &[u8]) -> Result<u32, NumericError> {
     Ok(out)
 }
 
+/// Converts the last 8 bytes of a slice from left to right into a u64
+/// Uses padding if necessary
 pub fn u64_from_bytes_end_be(input: &[u8]) -> Result<u64, NumericError> {
     let input_len = input.len();
     let input = match input_len {
@@ -84,5 +88,18 @@ mod tests {
         assert_eq!(u32_from_bytes_end_be(&first[..]).unwrap(), 0_u32);
         assert_eq!(u32_from_bytes_end_be(&second[..]).unwrap(), 255_u32);
         assert_eq!(u32_from_bytes_end_be(&third[..]).unwrap(), 2902458367_u32);
+    }
+
+    #[test]
+    fn test_helper_u64_from_bytes_end_be() {
+        let first = vec![0_u8];
+        let second = vec![0xff_u8];
+        let third = vec![
+            0x2a_u8, 0xac_u8, 0xff_u8, 0xff_u8, 0xff_u8, 0xff_u8, 0xff_u8, 0xff_u8, 0xff_u8,
+        ];
+
+        assert_eq!(u64_from_bytes_end_be(&first[..]).unwrap(), 0_u64);
+        assert_eq!(u64_from_bytes_end_be(&second[..]).unwrap(), 255_u64);
+        assert_eq!(u64_from_bytes_end_be(&third[..]).unwrap(), 2902458367_u64);
     }
 }

@@ -1,7 +1,7 @@
-use crate::helper::{usize_from_bytes_be, NumericError};
-use thiserror::Error;
+use super::RlpError;
+use crate::helper::usize_from_bytes_be;
 
-/// An enum RLP encoded bytes
+/// An enum for matching recursive length prefix encoded bytes
 #[derive(PartialEq, Clone)]
 pub(crate) enum Rlp<'a> {
     Bytes(&'a [u8]),
@@ -21,6 +21,7 @@ impl<'a> std::fmt::Debug for Rlp<'a> {
     }
 }
 
+/// Parse the first Rlp match of a slice
 pub(crate) fn parse<'a>(rlp_slice: &'a [u8]) -> Result<(Rlp<'a>, &'a [u8]), RlpError> {
     let len = rlp_slice.len();
     if len == 0 {
@@ -138,38 +139,12 @@ fn match_long_list(rlp_slice: &[u8], len: usize) -> Result<(Option<Rlp>, &[u8]),
     )
 }
 
-/// Enum for collecting RLP errors
-#[derive(Debug, Error)]
-pub enum RlpError {
-    #[error("No match found while parsing rlp slice")]
-    NoMatch,
-    #[error("Input is empty")]
-    NoInputLeft,
-    #[error("Unexptected match")]
-    UnexpectedMatch,
-    #[error("Cannot obtain size hint")]
-    NoSizeHint,
-    #[error("Type conversion error: {0}")]
-    Conversion(#[source] NumericError),
-    #[error("Error during RLP deserialization: {0}")]
-    CustomError(String),
-}
-
-impl serde::de::Error for RlpError {
-    fn custom<T>(msg: T) -> RlpError
-    where
-        T: std::fmt::Display,
-    {
-        RlpError::CustomError(msg.to_string())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_rlp_decode() {
+    fn test_rlp_parse() {
         // This is the body of block number 4
         let vec: Vec<u8> = vec![
             249, 2, 31, 192, 249, 2, 27, 249, 2, 24, 160, 212, 229, 103, 64, 248, 118, 174, 248,
