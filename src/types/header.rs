@@ -1,7 +1,7 @@
 use num_bigint::BigUint;
 use serde::Deserialize;
 
-// Header returned by subscription
+/// The block header
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Header {
     pub parent_hash: [u8; 32],
@@ -28,6 +28,7 @@ mod tests {
 
     #[test]
     fn test_header_deserialize() {
+        // This is the header of blocker number 1
         let test_header: Vec<u8> = vec![
             0xf9, 0x02, 0x11, 0xa0, 0xd4, 0xe5, 0x67, 0x40, 0xf8, 0x76, 0xae, 0xf8, 0xc0, 0x10,
             0xb8, 0x6a, 0x40, 0xd5, 0xf5, 0x67, 0x45, 0xa1, 0x18, 0xd0, 0x90, 0x6a, 0x34, 0xe6,
@@ -69,6 +70,6 @@ mod tests {
             0x15, 0xc2, 0xe6, 0x6f, 0x59, 0x88, 0x53, 0x9b, 0xd4, 0x97, 0x9f, 0xef, 0x1e, 0xc4,
         ];
         let mut header_deserializer = RlpDeserializer::new(&test_header).unwrap();
-        let header = Header::deserialize(&mut header_deserializer).unwrap();
+        let _header = Header::deserialize(&mut header_deserializer).unwrap();
     }
 }
