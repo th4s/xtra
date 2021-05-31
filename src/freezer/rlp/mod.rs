@@ -1,4 +1,5 @@
 use crate::helper::{u32_from_bytes_end_be, u64_from_bytes_end_be, NumericError};
+use log::trace;
 use serde::de::SeqAccess;
 use serde::Deserializer;
 use thiserror::Error;
@@ -8,13 +9,14 @@ use parse::{parse, Rlp};
 
 #[derive(Debug)]
 pub struct RlpDeserializer<'de> {
-    rlp_stack: Vec<Rlp<'de>>,
-    slice: &'de [u8],
+    parsed: Vec<Rlp<'de>>,
+    rest: &'de [u8],
 }
 
 struct SeqAccessor<'a, 'de: 'a> {
     de: &'a mut RlpDeserializer<'de>,
     dynamic: bool,
+    iterate: bool,
 }
 
 impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
@@ -25,10 +27,13 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
         T: serde::de::DeserializeSeed<'de>,
     {
         if self.de.last_element_len()? == 0 {
-            self.de.rlp_stack.pop().ok_or(RlpError::NoInputLeft)?;
+            self.de.parsed.pop().ok_or(RlpError::NoInputLeft)?;
             if self.dynamic {
                 return Ok(None);
             }
+        }
+        if self.iterate {
+            self.de.parse()?;
         }
         seed.deserialize(&mut *self.de).map(Some)
     }
@@ -36,30 +41,36 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
 
 impl<'de> RlpDeserializer<'de> {
     pub fn new(bytes: &'de [u8]) -> Result<RlpDeserializer, RlpError> {
+        trace!("Creating new rlp deserializer for {:?}", &bytes);
         let rlp_deserializer = RlpDeserializer {
-            rlp_stack: vec![],
-            slice: bytes,
+            parsed: vec![],
+            rest: bytes,
         };
         Ok(rlp_deserializer)
     }
 
-    fn next(&mut self) -> Result<(), RlpError> {
-        if let Some(last_element) = self.rlp_stack.last_mut() {
+    fn parse(&mut self) -> Result<(), RlpError> {
+        trace!(
+            "Parsing Rlp: Parsed: {:?}\n Unparsed: {:?}",
+            self.parsed,
+            self.rest
+        );
+        if let Some(last_element) = self.parsed.last_mut() {
             if let Rlp::List(inner) = last_element {
                 let (parsed, slice) = parse(inner)?;
                 *inner = slice;
-                self.rlp_stack.push(parsed);
+                self.parsed.push(parsed);
                 return Ok(());
             }
         }
-        let (parsed, slice) = parse(self.slice)?;
-        self.rlp_stack.push(parsed);
-        self.slice = slice;
+        let (parsed, slice) = parse(self.rest)?;
+        self.parsed.push(parsed);
+        self.rest = slice;
         Ok(())
     }
 
     fn last_element_len(&self) -> Result<usize, RlpError> {
-        if let Some(last_element) = self.rlp_stack.last() {
+        if let Some(last_element) = self.parsed.last() {
             return match last_element {
                 Rlp::Bytes(inner) => Ok(inner.len()),
                 Rlp::List(inner) => Ok(inner.len()),
@@ -120,7 +131,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        match self.rlp_stack.last_mut() {
+        match self.parsed.last_mut() {
             Some(Rlp::Empty) => visitor.visit_u8(0),
             Some(Rlp::Bytes(bytes)) => {
                 let byte = bytes[0];
@@ -142,7 +153,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        match self.rlp_stack.last_mut() {
+        match self.parsed.last_mut() {
             Some(Rlp::Bytes(bytes)) => {
                 let new_u32 = u32_from_bytes_end_be(&bytes).map_err(RlpError::Conversion)?;
                 *bytes = &bytes[..bytes.len().checked_sub(4).unwrap_or(0)];
@@ -160,8 +171,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        self.next()?;
-        match self.rlp_stack.last_mut() {
+        match self.parsed.last_mut() {
             Some(Rlp::Bytes(bytes)) => {
                 let new_u64 = u64_from_bytes_end_be(&bytes).map_err(RlpError::Conversion)?;
                 *bytes = &bytes[..bytes.len().checked_sub(8).unwrap_or(0)];
@@ -264,10 +274,10 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        self.next()?;
         visitor.visit_seq(SeqAccessor {
             de: self,
             dynamic: true,
+            iterate: false,
         })
     }
 
@@ -275,10 +285,10 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        self.next()?;
         visitor.visit_seq(SeqAccessor {
             de: self,
             dynamic: false,
+            iterate: false,
         })
     }
 
@@ -310,10 +320,11 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        self.next()?;
+        self.parse()?;
         visitor.visit_seq(SeqAccessor {
             de: self,
             dynamic: false,
+            iterate: true,
         })
     }
 
@@ -349,7 +360,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
 pub enum RlpError {
     #[error("No match found while parsing rlp slice")]
     NoMatch,
-    #[error("Input is empty")]
+    #[error("No input left to parse")]
     NoInputLeft,
     #[error("Unexptected match")]
     UnexpectedMatch,

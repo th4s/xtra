@@ -100,6 +100,9 @@ mod tests {
 
         assert_eq!(u64_from_bytes_end_be(&first[..]).unwrap(), 0_u64);
         assert_eq!(u64_from_bytes_end_be(&second[..]).unwrap(), 255_u64);
-        assert_eq!(u64_from_bytes_end_be(&third[..]).unwrap(), 2902458367_u64);
+        assert_eq!(
+            u64_from_bytes_end_be(&third[..]).unwrap(),
+            12465963768561532927_u64
+        );
     }
 }

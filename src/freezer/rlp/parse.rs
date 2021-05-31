@@ -1,5 +1,6 @@
 use super::RlpError;
 use crate::helper::usize_from_bytes_be;
+use log::trace;
 
 /// An enum for matching recursive length prefix encoded bytes
 #[derive(PartialEq, Clone)]
@@ -13,8 +14,8 @@ pub(crate) enum Rlp<'a> {
 impl<'a> std::fmt::Debug for Rlp<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
-            Rlp::Bytes(inner) => write!(f, "Bytes(\n{:x?}\n)", &inner),
-            Rlp::List(inner) => write!(f, "List(\n{:x?}\n)", &inner),
+            Rlp::Bytes(inner) => write!(f, "Bytes({:x?})", &inner),
+            Rlp::List(inner) => write!(f, "List({:x?})", &inner),
             Rlp::EmptyList => write!(f, "EmptyList"),
             Rlp::Empty => write!(f, "Empty"),
         }
@@ -24,6 +25,8 @@ impl<'a> std::fmt::Debug for Rlp<'a> {
 /// Parse the first Rlp match of a slice
 pub(crate) fn parse<'a>(rlp_slice: &'a [u8]) -> Result<(Rlp<'a>, &'a [u8]), RlpError> {
     let len = rlp_slice.len();
+    trace!("Parsing slice of length {}: {:?}", len, &rlp_slice);
+
     if len == 0 {
         return Err(RlpError::NoInputLeft);
     }
