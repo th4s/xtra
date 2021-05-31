@@ -1,5 +1,5 @@
 use super::RlpError;
-use crate::helper::usize_from_bytes_be;
+use crate::numeric::usize_from_bytes_be_padded;
 use log::trace;
 
 /// An enum for matching recursive length prefix encoded bytes
@@ -85,17 +85,17 @@ fn match_long_str(rlp_slice: &[u8], len: usize) -> Result<(Option<Rlp>, &[u8]), 
         && len > (rlp_slice[0] - 0xb7) as usize
         && len
             > (rlp_slice[0] - 0xb7) as usize
-                + usize_from_bytes_be(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
+                + usize_from_bytes_be_padded(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
                     .map_err(RlpError::Conversion)?
     {
         Ok((
             Some(Rlp::Bytes(
                 &rlp_slice[(rlp_slice[0] - 0xb6) as usize
-                    ..usize_from_bytes_be(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
+                    ..usize_from_bytes_be_padded(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
                         .map_err(RlpError::Conversion)?
                         + (rlp_slice[0] - 0xb6) as usize],
             )),
-            &rlp_slice[usize_from_bytes_be(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
+            &rlp_slice[usize_from_bytes_be_padded(&rlp_slice[1..(rlp_slice[0] - 0xb6) as usize])
                 .map_err(RlpError::Conversion)?
                 + (rlp_slice[0] - 0xb6) as usize..],
         ))
@@ -122,18 +122,22 @@ fn match_long_list(rlp_slice: &[u8], len: usize) -> Result<(Option<Rlp>, &[u8]),
         if len > (rlp_slice[0] - 0xf7) as usize
             && len
                 > (rlp_slice[0] - 0xf7) as usize
-                    + usize_from_bytes_be(&rlp_slice[1..(rlp_slice[0] - 0xf6) as usize])
+                    + usize_from_bytes_be_padded(&rlp_slice[1..(rlp_slice[0] - 0xf6) as usize])
                         .map_err(RlpError::Conversion)?
         {
             (
                 Some(Rlp::List(
                     &rlp_slice[(rlp_slice[0] - 0xf6) as usize
-                        ..usize_from_bytes_be(&rlp_slice[1..(rlp_slice[0] - 0xf6) as usize])
-                            .map_err(RlpError::Conversion)?
+                        ..usize_from_bytes_be_padded(
+                            &rlp_slice[1..(rlp_slice[0] - 0xf6) as usize],
+                        )
+                        .map_err(RlpError::Conversion)?
                             + (rlp_slice[0] - 0xf6) as usize],
                 )),
-                &rlp_slice[usize_from_bytes_be(&rlp_slice[1..(rlp_slice[0] - 0xf6) as usize])
-                    .map_err(RlpError::Conversion)?
+                &rlp_slice[usize_from_bytes_be_padded(
+                    &rlp_slice[1..(rlp_slice[0] - 0xf6) as usize],
+                )
+                .map_err(RlpError::Conversion)?
                     + (rlp_slice[0] - 0xf6) as usize..],
             )
         } else {

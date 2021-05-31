@@ -1,7 +1,6 @@
-use byteorder::{BigEndian, ReadBytesExt};
+use crate::numeric::{u16_from_bytes_be, u32_from_bytes_be, NumericError};
 use log::{debug, info, trace};
 use snap::raw::Decoder;
-use std::convert::TryInto;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -173,16 +172,10 @@ impl BlockPart {
         let mut offset_shift: i64 = -(first_offset as i64);
 
         for chunk in raw_index.chunks((FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) as usize) {
-            let file_number = u16::from_be_bytes(
-                chunk[..FILE_NUMBER_BYTE_SIZE as usize]
-                    .try_into()
-                    .map_err(FreezerError::ByteConversion)?,
-            );
-            let offset = u32::from_be_bytes(
-                chunk[FILE_NUMBER_BYTE_SIZE as usize..]
-                    .try_into()
-                    .map_err(FreezerError::ByteConversion)?,
-            ) as i64;
+            let file_number = u16_from_bytes_be(&chunk[..FILE_NUMBER_BYTE_SIZE as usize])
+                .map_err(FreezerError::Conversion)?;
+            let offset = u32_from_bytes_be(&chunk[FILE_NUMBER_BYTE_SIZE as usize..])
+                .map_err(FreezerError::Conversion)? as i64;
 
             if offset == 0 && !block_offsets.is_empty() {
                 let data_file_name = ancient_folder.join(self.data_filename(file_number - 1));
@@ -287,13 +280,17 @@ fn jump_to_block_number_and_read_single_index(
             (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * block_number,
         ))
         .map_err(FreezerError::SeekFile)?;
+    let mut file_number: [u8; 2] = [0; 2];
+    let mut offset: [u8; 4] = [0; 4];
+    index_file
+        .read_exact(&mut file_number)
+        .map_err(FreezerError::ReadFile)?;
+    index_file
+        .read_exact(&mut offset)
+        .map_err(FreezerError::ReadFile)?;
     Ok((
-        index_file
-            .read_u16::<BigEndian>()
-            .map_err(FreezerError::ReadFile)?,
-        index_file
-            .read_u32::<BigEndian>()
-            .map_err(FreezerError::ReadFile)? as u64,
+        u16_from_bytes_be(&file_number).map_err(FreezerError::Conversion)?,
+        u32_from_bytes_be(&offset).map_err(FreezerError::Conversion)? as u64,
     ))
 }
 
@@ -328,7 +325,7 @@ pub enum FreezerError {
     #[error("Cannot read from file, {0}")]
     ReadFile(#[source] std::io::Error),
     #[error("Unable to convert raw bytes into block offsets, {0}")]
-    ByteConversion(#[source] std::array::TryFromSliceError),
+    Conversion(#[source] NumericError),
     #[error("Unable to read file metadata, {0}")]
     FileMetadata(#[source] std::io::Error),
     #[error("Cannot determine block offset")]

@@ -1,3 +1,3 @@
 pub mod freezer;
-pub mod helper;
+pub mod numeric;
 pub mod types;

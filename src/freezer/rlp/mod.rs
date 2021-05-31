@@ -1,4 +1,4 @@
-use crate::helper::{u32_from_bytes_end_be, u64_from_bytes_end_be, NumericError};
+use crate::numeric::{u32_from_bytes_end_be_padded, u64_from_bytes_end_be_padded, NumericError};
 use log::trace;
 use serde::de::SeqAccess;
 use serde::Deserializer;
@@ -8,7 +8,7 @@ mod parse;
 use parse::{parse, Rlp};
 
 #[derive(Debug)]
-pub struct RlpDeserializer<'de> {
+pub(crate) struct RlpDeserializer<'de> {
     parsed: Vec<Rlp<'de>>,
     rest: &'de [u8],
 }
@@ -155,7 +155,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     {
         match self.parsed.last_mut() {
             Some(Rlp::Bytes(bytes)) => {
-                let new_u32 = u32_from_bytes_end_be(&bytes).map_err(RlpError::Conversion)?;
+                let new_u32 = u32_from_bytes_end_be_padded(&bytes).map_err(RlpError::Conversion)?;
                 *bytes = &bytes[..bytes.len().checked_sub(4).unwrap_or(0)];
                 visitor.visit_u32(new_u32)
             }
@@ -173,7 +173,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     {
         match self.parsed.last_mut() {
             Some(Rlp::Bytes(bytes)) => {
-                let new_u64 = u64_from_bytes_end_be(&bytes).map_err(RlpError::Conversion)?;
+                let new_u64 = u64_from_bytes_end_be_padded(&bytes).map_err(RlpError::Conversion)?;
                 *bytes = &bytes[..bytes.len().checked_sub(8).unwrap_or(0)];
                 visitor.visit_u64(new_u64)
             }
@@ -357,7 +357,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
 
 /// Enum for collecting RLP errors
 #[derive(Debug, Error)]
-pub enum RlpError {
+pub(crate) enum RlpError {
     #[error("No match found while parsing rlp slice")]
     NoMatch,
     #[error("No input left to parse")]
