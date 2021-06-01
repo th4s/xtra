@@ -287,7 +287,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     {
         visitor.visit_seq(SeqAccessor {
             de: self,
-            dynamic: false,
+            dynamic: true,
             iterate: false,
         })
     }

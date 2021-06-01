@@ -1,24 +1,51 @@
+use super::{ByteArray, ByteVec};
 use num_bigint::BigUint;
 use serde::Deserialize;
 
 /// The block header
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Header {
-    pub parent_hash: [u8; 32],
-    pub sha3_uncles: [u8; 32],
-    pub miner: [u8; 20],
-    pub state_root: [u8; 32],
-    pub transactions_root: [u8; 32],
-    pub receipts_root: [u8; 32],
-    pub logs_bloom: Vec<u8>,
+    pub parent_hash: ByteArray<32>,
+    pub sha3_uncles: ByteArray<32>,
+    pub miner: ByteArray<20>,
+    pub state_root: ByteArray<32>,
+    pub transactions_root: ByteArray<32>,
+    pub receipts_root: ByteArray<32>,
+    pub logs_bloom: ByteVec,
     pub difficulty: BigUint,
     pub number: BigUint,
     pub gas_limit: BigUint,
     pub gas_used: BigUint,
     pub time_stamp: u64,
-    pub extra_data: Vec<u8>,
-    pub mix_hash: [u8; 32],
-    pub nonce: [u8; 8],
+    pub extra_data: ByteVec,
+    pub mix_hash: ByteArray<32>,
+    pub nonce: ByteArray<8>,
+}
+
+impl std::fmt::Display for Header {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Header {{\n\tparent_hash: {}, \n\tsha3_uncles: {}, \n\tminer: {}, \n\tstate_root: {}, \
+            \n\ttransactions_root: {}, \n\treceipts_root: {}, \n\tlogs_bloom: 0x..., \n\tdifficulty: {}, \
+            \n\tnumber: {}, \n\tgas_limit: {}, \n\tgas_used: {}, \n\ttime_stamp: {}, \n\textra_data: {}, \
+            \n\tmix_hash: {}, \n\tnonce: {} \n}}",
+            self.parent_hash,
+            self.sha3_uncles,
+            self.miner,
+            self.state_root,
+            self.transactions_root,
+            self.receipts_root,
+            self.difficulty,
+            self.number,
+            self.gas_limit,
+            self.gas_used,
+            self.time_stamp,
+            self.extra_data,
+            self.mix_hash,
+            self.nonce
+        )
+    }
 }
 
 #[cfg(test)]
@@ -71,5 +98,6 @@ mod tests {
         ];
         let mut header_deserializer = RlpDeserializer::new(&test_header).unwrap();
         let _header = Header::deserialize(&mut header_deserializer).unwrap();
+        println!("{}", _header);
     }
 }
