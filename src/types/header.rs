@@ -26,7 +26,7 @@ impl std::fmt::Display for Header {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Header {{\n\tparent_hash: {}, \n\tsha3_uncles: {}, \n\tminer: {}, \n\tstate_root: {}, \
+            "{{\n\tparent_hash: {}, \n\tsha3_uncles: {}, \n\tminer: {}, \n\tstate_root: {}, \
             \n\ttransactions_root: {}, \n\treceipts_root: {}, \n\tlogs_bloom: 0x..., \n\tdifficulty: {}, \
             \n\tnumber: {}, \n\tgas_limit: {}, \n\tgas_used: {}, \n\ttime_stamp: {}, \n\textra_data: {}, \
             \n\tmix_hash: {}, \n\tnonce: {} \n}}",

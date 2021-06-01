@@ -34,3 +34,17 @@ impl std::fmt::Display for ByteVec {
         write!(f, "{}", out)
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(transparent)]
+pub struct NiceVec<T>(pub Vec<T>);
+
+impl<T: std::fmt::Display> std::fmt::Display for NiceVec<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut out = String::new();
+        self.0
+            .iter()
+            .for_each(|x| out.push_str(&format!("{}\n", x)));
+        write!(f, "[\n\t{}\n]", out)
+    }
+}

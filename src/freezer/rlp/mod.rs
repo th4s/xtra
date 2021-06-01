@@ -75,7 +75,7 @@ impl<'de> RlpDeserializer<'de> {
                 Rlp::Bytes(inner) => Ok(inner.len()),
                 Rlp::List(inner) => Ok(inner.len()),
                 Rlp::Empty => Ok(1),
-                Rlp::EmptyList => Ok(1),
+                Rlp::EmptyList => Ok(0),
             };
         }
         Err(RlpError::NoInputLeft)
@@ -132,7 +132,10 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         V: serde::de::Visitor<'de>,
     {
         match self.parsed.last_mut() {
-            Some(Rlp::Empty) => visitor.visit_u8(0),
+            Some(empty @ Rlp::Empty) => {
+                *empty = Rlp::Bytes(&[]);
+                visitor.visit_u8(0)
+            }
             Some(Rlp::Bytes(bytes)) => {
                 let byte = bytes[0];
                 *bytes = &bytes[1..];
