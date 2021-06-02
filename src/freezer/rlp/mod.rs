@@ -15,7 +15,6 @@ pub(crate) struct RlpDeserializer<'de> {
 
 struct SeqAccessor<'a, 'de: 'a> {
     de: &'a mut RlpDeserializer<'de>,
-    dynamic: bool,
     iterate: bool,
 }
 
@@ -28,7 +27,7 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
     {
         if self.de.last_element_len()? == 0 {
             self.de.parsed.pop().ok_or(RlpError::NoInputLeft)?;
-            if self.dynamic {
+            if !self.iterate {
                 return Ok(None);
             }
         }
@@ -40,7 +39,7 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
 }
 
 impl<'de> RlpDeserializer<'de> {
-    pub fn new(bytes: &'de [u8]) -> Result<RlpDeserializer, RlpError> {
+    pub(crate) fn new(bytes: &'de [u8]) -> Result<RlpDeserializer, RlpError> {
         trace!("Creating new rlp deserializer for {:?}", &bytes);
         let rlp_deserializer = RlpDeserializer {
             parsed: vec![],
@@ -132,14 +131,14 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         V: serde::de::Visitor<'de>,
     {
         match self.parsed.last_mut() {
-            Some(empty @ Rlp::Empty) => {
-                *empty = Rlp::Bytes(&[]);
-                visitor.visit_u8(0)
-            }
             Some(Rlp::Bytes(bytes)) => {
                 let byte = bytes[0];
                 *bytes = &bytes[1..];
                 visitor.visit_u8(byte)
+            }
+            Some(empty @ Rlp::Empty) => {
+                *empty = Rlp::Bytes(&[]);
+                visitor.visit_u8(0)
             }
             _ => Err(RlpError::UnexpectedMatch),
         }
@@ -279,7 +278,6 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     {
         visitor.visit_seq(SeqAccessor {
             de: self,
-            dynamic: true,
             iterate: false,
         })
     }
@@ -290,7 +288,6 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     {
         visitor.visit_seq(SeqAccessor {
             de: self,
-            dynamic: true,
             iterate: false,
         })
     }
@@ -326,7 +323,6 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         self.parse()?;
         visitor.visit_seq(SeqAccessor {
             de: self,
-            dynamic: false,
             iterate: true,
         })
     }
