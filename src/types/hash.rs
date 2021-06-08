@@ -1,12 +1,16 @@
 use super::ByteArray;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct BlockHash(pub ByteArray<32>);
 
 impl std::fmt::Display for BlockHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(
+            f,
+            "{}",
+            &serde_json::to_string_pretty(&self.0).map_err(|_| std::fmt::Error)?
+        )
     }
 }
 
@@ -18,7 +22,7 @@ mod tests {
     #[test]
     fn test_hash_deserialize() {
         // These are the block hashes of block 1 and 10
-        // UNFORTUNATELY we have to prepende an artificial "0xa0" here, meaning the data in
+        // UNFORTUNATELY we have to prepend an artificial "0xa0" here, meaning the data in
         // hashes.cdat are not RLP properly RLP encoded for some reason
         let hash1_input: Vec<u8> = vec![
             0xa0, 0x88, 0xe9, 0x6d, 0x45, 0x37, 0xbe, 0xa4, 0xd9, 0xc0, 0x5d, 0x12, 0x54, 0x99,

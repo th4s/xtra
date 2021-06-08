@@ -1,9 +1,8 @@
-use super::{ByteArray, ByteVec};
-use num_bigint::BigUint;
-use serde::Deserialize;
+use super::{ByteArray, ByteVec, NiceBigUint};
+use serde::{Deserialize, Serialize};
 
 /// The block header
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct BlockHeader {
     pub parent_hash: ByteArray<32>,
     pub sha3_uncles: ByteArray<32>,
@@ -12,10 +11,11 @@ pub struct BlockHeader {
     pub transactions_root: ByteArray<32>,
     pub receipts_root: ByteArray<32>,
     pub logs_bloom: ByteVec,
-    pub difficulty: BigUint,
-    pub number: BigUint,
-    pub gas_limit: BigUint,
-    pub gas_used: BigUint,
+    pub difficulty: NiceBigUint,
+    pub number: NiceBigUint,
+    pub gas_limit: NiceBigUint,
+    pub gas_used: NiceBigUint,
+    #[serde(serialize_with = "crate::types::str_serialize")]
     pub time_stamp: u64,
     pub extra_data: ByteVec,
     pub mix_hash: ByteArray<32>,
@@ -26,24 +26,8 @@ impl std::fmt::Display for BlockHeader {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{{\n\tparent_hash: {}, \n\tsha3_uncles: {}, \n\tminer: {}, \n\tstate_root: {}, \
-            \n\ttransactions_root: {}, \n\treceipts_root: {}, \n\tlogs_bloom: 0x..., \n\tdifficulty: {}, \
-            \n\tnumber: {}, \n\tgas_limit: {}, \n\tgas_used: {}, \n\ttime_stamp: {}, \n\textra_data: {}, \
-            \n\tmix_hash: {}, \n\tnonce: {} \n}}",
-            self.parent_hash,
-            self.sha3_uncles,
-            self.miner,
-            self.state_root,
-            self.transactions_root,
-            self.receipts_root,
-            self.difficulty,
-            self.number,
-            self.gas_limit,
-            self.gas_used,
-            self.time_stamp,
-            self.extra_data,
-            self.mix_hash,
-            self.nonce
+            "{}",
+            &serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?
         )
     }
 }
@@ -52,6 +36,7 @@ impl std::fmt::Display for BlockHeader {
 mod tests {
     use super::*;
     use crate::freezer::rlp::RlpDeserializer;
+    use num_bigint::BigUint;
 
     #[test]
     fn test_header_deserialize() {
@@ -130,10 +115,10 @@ mod tests {
                 0xe3, 0x63, 0xb4, 0x21,
             ]),
             logs_bloom: ByteVec(vec![0; 256]),
-            difficulty: BigUint::from(17171480576_u64),
-            number: BigUint::from(1_u32),
-            gas_limit: BigUint::from(5000_u32),
-            gas_used: BigUint::from(0_u32),
+            difficulty: NiceBigUint(BigUint::from(17171480576_u64)),
+            number: NiceBigUint(BigUint::from(1_u32)),
+            gas_limit: NiceBigUint(BigUint::from(5000_u32)),
+            gas_used: NiceBigUint(BigUint::from(0_u32)),
             time_stamp: 1438269988_u64,
             extra_data: ByteVec(vec![
                 0x47, 0x65, 0x74, 0x68, 0x2f, 0x76, 0x31, 0x2e, 0x30, 0x2e, 0x30, 0x2f, 0x6c, 0x69,

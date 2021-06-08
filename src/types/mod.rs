@@ -1,4 +1,5 @@
-use serde::Deserialize;
+use num_bigint::BigUint;
+use serde::{Deserialize, Serialize};
 
 mod body;
 mod difficulty;
@@ -26,9 +27,18 @@ impl<const N: usize> std::fmt::Display for ByteArray<N> {
     }
 }
 
+impl<const N: usize> Serialize for ByteArray<N> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(transparent)]
-pub struct ByteVec(pub Vec<u8>);
+pub struct ByteVec(#[serde(serialize_with = "str_serialize")] pub Vec<u8>);
 
 impl std::fmt::Display for ByteVec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -40,16 +50,43 @@ impl std::fmt::Display for ByteVec {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+impl Serialize for ByteVec {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct NiceVec<T>(pub Vec<T>);
 
-impl<T: std::fmt::Display> std::fmt::Display for NiceVec<T> {
+impl<T: std::fmt::Display + Serialize> std::fmt::Display for NiceVec<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut out = String::new();
-        self.0
-            .iter()
-            .for_each(|x| out.push_str(&format!("{}\n", x)));
-        write!(f, "[\n\t{}\n]", out)
+        write!(
+            f,
+            "{}",
+            &serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?
+        )
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct NiceBigUint(#[serde(serialize_with = "str_serialize")] BigUint);
+
+impl std::fmt::Display for NiceBigUint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "\"{}\"", &self.0.to_str_radix(10))
+    }
+}
+
+pub fn str_serialize<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
+where
+    T: std::fmt::Display,
+    S: serde::ser::Serializer,
+{
+    serializer.collect_str(value)
 }

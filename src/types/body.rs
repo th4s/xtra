@@ -1,8 +1,7 @@
-use super::{BlockHeader, ByteArray, ByteVec, NiceVec};
-use num_bigint::BigUint;
-use serde::Deserialize;
+use super::{BlockHeader, ByteArray, ByteVec, NiceBigUint, NiceVec};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct BlockBody {
     pub transactions: NiceVec<Transaction>,
     pub uncles: NiceVec<BlockHeader>,
@@ -12,20 +11,23 @@ impl std::fmt::Display for BlockBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{{\n\ttransactions: {}, \n\tuncles: {}\n}}",
-            self.transactions, self.uncles
+            "{}",
+            &serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?
         )
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Transaction {
+    #[serde(serialize_with = "crate::types::str_serialize")]
     pub nonce: u64,
-    pub gas_price: BigUint,
+    pub gas_price: NiceBigUint,
+    #[serde(serialize_with = "crate::types::str_serialize")]
     pub gas: u64,
     pub to: ByteArray<20>,
-    pub value: BigUint,
+    pub value: NiceBigUint,
     pub data: ByteVec,
+    #[serde(serialize_with = "crate::types::str_serialize")]
     v: u8,
     r: ByteArray<32>,
     s: ByteArray<32>,
@@ -35,17 +37,8 @@ impl std::fmt::Display for Transaction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{{\n\tnonce: {},\n\tgas_price: {}\n\tgas: {},\n\tto: {},\n\t\
-            value: {},\n\tdata: {},\n\tv: {},\n\tr: {},\n\ts: {}\n}}",
-            self.nonce,
-            self.gas_price,
-            self.gas,
-            self.to,
-            self.value,
-            self.data,
-            self.v,
-            self.r,
-            self.s
+            "{}",
+            &serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?
         )
     }
 }
@@ -54,6 +47,7 @@ impl std::fmt::Display for Transaction {
 mod tests {
     use super::*;
     use crate::freezer::rlp::RlpDeserializer;
+    use num_bigint::BigUint;
 
     #[test]
     fn test_body_deserialize() {
@@ -74,13 +68,13 @@ mod tests {
         let body_expected = BlockBody {
             transactions: NiceVec(vec![Transaction {
                 nonce: 0,
-                gas_price: BigUint::from(50000000000000_u64),
+                gas_price: NiceBigUint(BigUint::from(50000000000000_u64)),
                 gas: 21000,
                 to: ByteArray::<20>([
                     0x5d, 0xf9, 0xb8, 0x79, 0x91, 0x26, 0x2f, 0x6b, 0xa4, 0x71, 0xf0, 0x97, 0x58,
                     0xcd, 0xe1, 0xc0, 0xfc, 0x1d, 0xe7, 0x34,
                 ]),
-                value: BigUint::from(31337_u32),
+                value: NiceBigUint(BigUint::from(31337_u32)),
                 data: ByteVec(vec![0_u8]),
                 v: 28_u8,
                 r: ByteArray::<32>([
@@ -96,7 +90,6 @@ mod tests {
             }]),
             uncles: NiceVec(vec![]),
         };
-
         assert_eq!(body, body_expected);
     }
 }
