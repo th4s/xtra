@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 /// The block header
 #[derive(Clone, Debug, PartialEq, Deserialize)]
-pub struct Header {
+pub struct BlockHeader {
     pub parent_hash: ByteArray<32>,
     pub sha3_uncles: ByteArray<32>,
     pub miner: ByteArray<20>,
@@ -22,7 +22,7 @@ pub struct Header {
     pub nonce: ByteArray<8>,
 }
 
-impl std::fmt::Display for Header {
+impl std::fmt::Display for BlockHeader {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -96,10 +96,10 @@ mod tests {
             0xd6, 0x5f, 0x55, 0xa0, 0x52, 0x6c, 0x41, 0xfd, 0x18, 0xe1, 0xb1, 0x6f, 0x1a, 0x12,
             0x15, 0xc2, 0xe6, 0x6f, 0x59, 0x88, 0x53, 0x9b, 0xd4, 0x97, 0x9f, 0xef, 0x1e, 0xc4,
         ];
-        let mut header_deserializer = RlpDeserializer::new(&header_input).unwrap();
-        let header = Header::deserialize(&mut header_deserializer).unwrap();
+        let mut header_deserializer = RlpDeserializer::new(&header_input);
+        let header = BlockHeader::deserialize(&mut header_deserializer).unwrap();
 
-        let header_expected = Header {
+        let header_expected = BlockHeader {
             parent_hash: ByteArray::<32>([
                 0xd4, 0xe5, 0x67, 0x40, 0xf8, 0x76, 0xae, 0xf8, 0xc0, 0x10, 0xb8, 0x6a, 0x40, 0xd5,
                 0xf5, 0x67, 0x45, 0xa1, 0x18, 0xd0, 0x90, 0x6a, 0x34, 0xe6, 0x9a, 0xec, 0x8c, 0x0d,

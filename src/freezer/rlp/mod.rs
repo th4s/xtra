@@ -39,13 +39,13 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
 }
 
 impl<'de> RlpDeserializer<'de> {
-    pub(crate) fn new(bytes: &'de [u8]) -> Result<RlpDeserializer, RlpError> {
+    pub(crate) fn new(bytes: &'de [u8]) -> RlpDeserializer {
         trace!("Creating new rlp deserializer for {:?}", &bytes);
         let rlp_deserializer = RlpDeserializer {
             parsed: vec![],
             rest: bytes,
         };
-        Ok(rlp_deserializer)
+        rlp_deserializer
     }
 
     fn parse(&mut self) -> Result<(), RlpError> {

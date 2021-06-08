@@ -1,14 +1,14 @@
-use super::{ByteArray, ByteVec, Header, NiceVec};
+use super::{BlockHeader, ByteArray, ByteVec, NiceVec};
 use num_bigint::BigUint;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct Body {
+pub struct BlockBody {
     pub transactions: NiceVec<Transaction>,
-    pub uncles: NiceVec<Header>,
+    pub uncles: NiceVec<BlockHeader>,
 }
 
-impl std::fmt::Display for Body {
+impl std::fmt::Display for BlockBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -68,10 +68,10 @@ mod tests {
             0xfc, 0xe8, 0x05, 0xda, 0xef, 0x70, 0x16, 0xb9, 0xb6, 0x75, 0xc1, 0x37, 0xa6, 0xa4,
             0x1a, 0x54, 0x8f, 0x7b, 0x60, 0xa3, 0x48, 0x4c, 0x06, 0xa3, 0x3a, 0xc0,
         ];
-        let mut body_deserializer = RlpDeserializer::new(&body_input).unwrap();
-        let body = Body::deserialize(&mut body_deserializer).unwrap();
+        let mut body_deserializer = RlpDeserializer::new(&body_input);
+        let body = BlockBody::deserialize(&mut body_deserializer).unwrap();
 
-        let body_expected = Body {
+        let body_expected = BlockBody {
             transactions: NiceVec(vec![Transaction {
                 nonce: 0,
                 gas_price: BigUint::from(50000000000000_u64),

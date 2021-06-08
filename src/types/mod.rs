@@ -1,4 +1,3 @@
-pub use header::Header;
 use serde::Deserialize;
 
 mod body;
@@ -6,6 +5,12 @@ mod difficulty;
 mod hash;
 mod header;
 mod receipt;
+
+pub use body::BlockBody;
+pub use difficulty::TotalDifficulty;
+pub use hash::BlockHash;
+pub use header::BlockHeader;
+pub use receipt::TransactionReceipt;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(transparent)]

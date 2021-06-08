@@ -21,8 +21,8 @@ mod tests {
         let diff1_input: Vec<u8> = vec![0x85, 0x0b, 0xfe, 0x80, 0x10, 0x00];
         let diff2_input: Vec<u8> = vec![0x86, 0x14, 0x06, 0xe2, 0x2e, 0x34, 0xf5];
 
-        let mut diff_deserializer1 = RlpDeserializer::new(&diff1_input).unwrap();
-        let mut diff_deserializer2 = RlpDeserializer::new(&diff2_input).unwrap();
+        let mut diff_deserializer1 = RlpDeserializer::new(&diff1_input);
+        let mut diff_deserializer2 = RlpDeserializer::new(&diff2_input);
 
         let diff1 = TotalDifficulty::deserialize(&mut diff_deserializer1).unwrap();
         let diff2 = TotalDifficulty::deserialize(&mut diff_deserializer2).unwrap();
