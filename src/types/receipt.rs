@@ -1,12 +1,67 @@
-use super::{ByteArray, ByteVec, NiceVec};
+use super::{ByteArray, ByteVec, NiceBigUint, NiceVec};
+use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct Receipts(NiceVec<TransactionReceipt>);
+
+impl std::fmt::Display for Receipts {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            &serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct TransactionReceipt {
-    post_state: ByteArray<32>,
-    #[serde(serialize_with = "crate::types::str_serialize")]
-    cum_gas_used: u64,
+    #[serde(deserialize_with = "deserialize_post_state")]
+    post_state: PostState,
+    cum_gas_used: NiceBigUint,
     logs: NiceVec<Log>,
+}
+
+impl std::fmt::Display for TransactionReceipt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            &serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?
+        )
+    }
+}
+
+fn deserialize_post_state<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<PostState, D::Error> {
+    let buf = Vec::<u8>::deserialize(deserializer)?;
+    if buf.len() == 1 {
+        return Ok(PostState::Success(match buf[0] {
+            0x01 => true,
+            _ => false,
+        }));
+    }
+    let mut out: [u8; 32] = [0; 32];
+    out.copy_from_slice(&buf);
+    Ok(PostState::State(ByteArray::<32>(out)))
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PostState {
+    State(ByteArray<32>),
+    Success(bool),
+}
+
+impl std::fmt::Display for PostState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PostState::State(bytes) => write!(f, "{}", bytes),
+            PostState::Success(success) => write!(f, "{}", success),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -25,8 +80,20 @@ pub struct Log {
     removed: bool,
 }
 
+impl std::fmt::Display for Log {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            &serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use num_bigint::BigUint;
+
     use super::*;
     use crate::freezer::rlp::RlpDeserializer;
 
@@ -39,18 +106,18 @@ mod tests {
             0x22, 0xa3, 0xe3, 0x1a, 0xed, 0x19, 0x57, 0x82, 0x52, 0x08, 0xc0,
         ];
 
-        let receipt_expected: TransactionReceipt = TransactionReceipt {
-            post_state: ByteArray::<32>([
+        let receipt_expected = Receipts(NiceVec(vec![TransactionReceipt {
+            post_state: PostState::State(ByteArray::<32>([
                 0x96, 0xa8, 0xe0, 0x09, 0xd2, 0xb8, 0x8b, 0x14, 0x83, 0xe6, 0x94, 0x1e, 0x68, 0x12,
                 0xe3, 0x22, 0x63, 0xb0, 0x56, 0x83, 0xfa, 0xc2, 0x02, 0xab, 0xc6, 0x22, 0xa3, 0xe3,
                 0x1a, 0xed, 0x19, 0x57,
-            ]),
-            cum_gas_used: 8540680,
+            ])),
+            cum_gas_used: NiceBigUint(BigUint::from(21000_u32)),
             logs: NiceVec(vec![]),
-        };
+        }]));
 
         let mut receipt_deserializer = RlpDeserializer::new(&receipt_input);
-        let receipt = TransactionReceipt::deserialize(&mut receipt_deserializer).unwrap();
+        let receipt = Receipts::deserialize(&mut receipt_deserializer).unwrap();
 
         assert_eq!(receipt, receipt_expected);
     }
