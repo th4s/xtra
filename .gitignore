@@ -1,5 +1,2 @@
 /target
-.idea/
 Cargo.lock
-bench.env
-benches/fixtures

@@ -334,8 +334,6 @@ pub enum FreezerError {
     SnappyDecompress(#[source] snap::Error),
 }
 
-// Fixture data in folder `tests/fixtures/bodies` contains the bodies of the first 50k blocks of the
-// Ethereum mainnet exported from the geth `chaindata/ancient` folder
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,7 +341,7 @@ mod tests {
 
     #[test]
     fn test_freezer_export_bodies() {
-        let path_buf = PathBuf::from("./tests/fixtures/bodies");
+        let path_buf = PathBuf::from("./fixtures/bodies");
         // Check if we can read 50k blocks without errors
         let _bodies = BlockPart::Bodies
             .load(path_buf.as_path(), 0, 49999)
@@ -352,14 +350,14 @@ mod tests {
 
     #[test]
     fn test_freezer_export_headers() {
-        let path_buf = PathBuf::from("./tests/fixtures/headers");
+        let path_buf = PathBuf::from("./fixtures/headers");
         // Check if we can read some headers without errors
         let headers = BlockPart::Headers.load(path_buf.as_path(), 0, 99).unwrap();
     }
 
     #[test]
     fn test_freezer_jump_to_block_number_and_read_single_index() {
-        let file_name = PathBuf::from("./tests/fixtures/bodies/bodies.cidx");
+        let file_name = PathBuf::from("./fixtures/bodies/bodies.cidx");
         let mut file = File::open(file_name).unwrap();
         let (file_number, offset) =
             jump_to_block_number_and_read_single_index(&mut file, 20).unwrap();
@@ -369,7 +367,7 @@ mod tests {
 
     #[test]
     fn test_freezer_seek_and_read() {
-        let file_name = PathBuf::from("./tests/fixtures/bodies/bodies.0000.cdat");
+        let file_name = PathBuf::from("./fixtures/bodies/bodies.0000.cdat");
         let mut file = File::open(file_name).unwrap();
         let mut buffer = Vec::<u8>::new();
 
