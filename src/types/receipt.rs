@@ -95,7 +95,7 @@ mod tests {
     use num_bigint::BigUint;
 
     use super::*;
-    use crate::freezer::rlp::RlpDeserializer;
+    use crate::rlp::RlpDeserializer;
 
     #[test]
     fn test_receipt_deserialize() {

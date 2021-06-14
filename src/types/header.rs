@@ -35,7 +35,7 @@ impl std::fmt::Display for BlockHeader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::freezer::rlp::RlpDeserializer;
+    use crate::rlp::RlpDeserializer;
     use num_bigint::BigUint;
 
     #[test]

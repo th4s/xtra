@@ -17,7 +17,7 @@ impl std::fmt::Display for BlockHash {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::freezer::rlp::RlpDeserializer;
+    use crate::rlp::RlpDeserializer;
 
     #[test]
     fn test_hash_deserialize() {

@@ -7,8 +7,6 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-pub mod rlp;
-
 // A single index consists of 2 bytes (u16) for the file number and 4 bytes (u32) for the offset
 const FILE_NUMBER_BYTE_SIZE: u64 = 2;
 const OFFSET_NUMBER_BYTE_SIZE: u64 = 4;
