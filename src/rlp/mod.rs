@@ -360,7 +360,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
 
 /// Enum for collecting RLP errors
 #[derive(Debug, Error)]
-pub(crate) enum RlpError {
+pub enum RlpError {
     #[error("No match found while parsing rlp slice")]
     NoMatch,
     #[error("No input left to parse")]

@@ -1,5 +1,7 @@
 use crate::numeric::{u16_from_bytes_be, u32_from_bytes_be, NumericError};
+use crate::rlp::RlpDeserializer;
 use log::{debug, info, trace};
+use serde::de::DeserializeOwned;
 use snap::raw::Decoder;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
@@ -19,15 +21,6 @@ impl Freezer {
     pub fn new(ancient_folder: PathBuf) -> Self {
         Freezer { ancient_folder }
     }
-
-    pub fn defrost(
-        &self,
-        block_part: BlockPart,
-        min_block: u64,
-        max_block: u64,
-    ) -> Result<(), FreezerError> {
-        todo!()
-    }
 }
 
 /// Allows to export block parts from the `chaindata/ancient` folder from geth
@@ -46,12 +39,12 @@ impl BlockPart {
     /// Loads a range of block parts from min_block (inclusive) to max_block (exclusive).
     /// Returns two vecs. The second vec contains the raw block data and the first vec
     /// contains the byte offset of the first byte for every block in the second vec.
-    pub fn load(
+    pub fn load<T: DeserializeOwned>(
         &self,
         ancient_folder: &Path,
         min_block: u64,
         max_block: u64,
-    ) -> Result<Vec<u32>, FreezerError> {
+    ) -> Result<Vec<T>, FreezerError> {
         if min_block >= max_block {
             return Err(FreezerError::BlockRange);
         }
@@ -91,48 +84,11 @@ impl BlockPart {
         )?;
 
         // Decompress if necessary and turn into vec of blobs
-        let block_parts = self.decompress(block_data.as_slice(), block_offsets.as_slice())?;
-
-        // Next step is to RLP-decode
-        // let rlp_objects: Vec<Rlp> = self.rlp_decode(block_parts.as_slice())?;
+        let block_objects =
+            self.postprocess_data(block_data.as_slice(), block_offsets.as_slice())?;
 
         info!("Reading successful");
-        Ok(vec![])
-    }
-
-    fn load_data(
-        &self,
-        ancient_folder: &Path,
-        first_file_number: u16,
-        last_file_number: u16,
-        first_offset: u64,
-        last_offset: u64,
-    ) -> Result<Vec<u8>, FreezerError> {
-        debug!("Reading raw block data from file number {} with offset {} until file number {} with offset {}...",
-               first_file_number, first_offset, last_file_number, last_offset);
-        let mut current_file_number = first_file_number;
-        let mut block_data: Vec<u8> = Vec::new();
-
-        while current_file_number <= last_file_number {
-            let data_file_name = ancient_folder.join(self.data_filename(current_file_number));
-            let mut data_file = File::open(data_file_name).map_err(FreezerError::OpenFile)?;
-
-            let start = if current_file_number == first_file_number {
-                first_offset
-            } else {
-                0
-            };
-
-            let end = if current_file_number == last_file_number {
-                Some(last_offset)
-            } else {
-                None
-            };
-            let _ = seek_and_read(&mut data_file, &mut block_data, start, end)?;
-            current_file_number += 1;
-        }
-        debug!("Read {} bytes of data", block_data.len());
-        Ok(block_data)
+        Ok(block_objects)
     }
 
     fn load_index_raw(
@@ -190,12 +146,47 @@ impl BlockPart {
         Ok(block_offsets)
     }
 
-    fn decompress(
+    fn load_data(
+        &self,
+        ancient_folder: &Path,
+        first_file_number: u16,
+        last_file_number: u16,
+        first_offset: u64,
+        last_offset: u64,
+    ) -> Result<Vec<u8>, FreezerError> {
+        debug!("Reading raw block data from file number {} with offset {} until file number {} with offset {}...",
+               first_file_number, first_offset, last_file_number, last_offset);
+        let mut current_file_number = first_file_number;
+        let mut block_data: Vec<u8> = Vec::new();
+
+        while current_file_number <= last_file_number {
+            let data_file_name = ancient_folder.join(self.data_filename(current_file_number));
+            let mut data_file = File::open(data_file_name).map_err(FreezerError::OpenFile)?;
+
+            let start = if current_file_number == first_file_number {
+                first_offset
+            } else {
+                0
+            };
+
+            let end = if current_file_number == last_file_number {
+                Some(last_offset)
+            } else {
+                None
+            };
+            let _ = seek_and_read(&mut data_file, &mut block_data, start, end)?;
+            current_file_number += 1;
+        }
+        debug!("Read {} bytes of data", block_data.len());
+        Ok(block_data)
+    }
+
+    fn postprocess_data<T: DeserializeOwned>(
         &self,
         block_data: &[u8],
         block_offsets: &[u64],
-    ) -> Result<Vec<Vec<u8>>, FreezerError> {
-        let mut block_parts: Vec<Vec<u8>> = Vec::new();
+    ) -> Result<Vec<T>, FreezerError> {
+        let mut block_objects: Vec<T> = Vec::new();
         let decompressor = |input: &[u8]| -> Result<Vec<u8>, FreezerError> {
             if self.is_compressed() {
                 debug!("Decompressing data...");
@@ -209,16 +200,20 @@ impl BlockPart {
             }
         };
 
+        let rlp_deserialize = |input: &[u8]| -> Result<T, FreezerError> {
+            let mut deserializer = RlpDeserializer::new(input);
+            T::deserialize(&mut deserializer).map_err(FreezerError::RlpDeserialization)
+        };
         for offsets in block_offsets.windows(2) {
             let blob = decompressor(&block_data[offsets[0] as usize..offsets[1] as usize])?;
-            block_parts.push(blob)
+            block_objects.push(rlp_deserialize(&blob)?)
         }
         // We need to add the last block part manually, since we are working with offsets here
         let blob = decompressor(
             &block_data[*block_offsets.last().ok_or(FreezerError::BlockOffset)? as usize..],
         )?;
-        block_parts.push(blob);
-        Ok(block_parts)
+        block_objects.push(rlp_deserialize(&blob)?);
+        Ok(block_objects)
     }
 
     const fn index_filename(&self) -> &'static str {
@@ -330,11 +325,14 @@ pub enum FreezerError {
     BlockOffset,
     #[error("Read error during decompression, {0}")]
     SnappyDecompress(#[source] snap::Error),
+    #[error("Error during rlp deserialization, {0}")]
+    RlpDeserialization(#[source] crate::rlp::RlpError),
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::{BlockBody, BlockHeader};
     use std::path::PathBuf;
 
     #[test]
@@ -342,7 +340,7 @@ mod tests {
         let path_buf = PathBuf::from("./fixtures/bodies");
         // Check if we can read 50k blocks without errors
         let _bodies = BlockPart::Bodies
-            .load(path_buf.as_path(), 0, 49999)
+            .load::<BlockBody>(path_buf.as_path(), 0, 49999)
             .unwrap();
     }
 
@@ -350,7 +348,9 @@ mod tests {
     fn test_freezer_export_headers() {
         let path_buf = PathBuf::from("./fixtures/headers");
         // Check if we can read some headers without errors
-        let headers = BlockPart::Headers.load(path_buf.as_path(), 0, 99).unwrap();
+        let _headers = BlockPart::Headers
+            .load::<BlockHeader>(path_buf.as_path(), 0, 99)
+            .unwrap();
     }
 
     #[test]
