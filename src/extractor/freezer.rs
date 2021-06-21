@@ -201,7 +201,8 @@ impl BlockPart {
         };
 
         let rlp_deserialize = |input: &[u8]| -> Result<T, FreezerError> {
-            let mut deserializer = RlpDeserializer::new(input);
+            let mut deserializer =
+                RlpDeserializer::new(input).map_err(FreezerError::RlpDeserialization)?;
             T::deserialize(&mut deserializer).map_err(FreezerError::RlpDeserialization)
         };
         for offsets in block_offsets.windows(2) {
@@ -340,7 +341,7 @@ mod tests {
         let path_buf = PathBuf::from("./fixtures/bodies");
         // Check if we can read 50k blocks without errors
         let _bodies = BlockPart::Bodies
-            .load::<BlockBody>(path_buf.as_path(), 0, 49999)
+            .load::<BlockBody>(path_buf.as_path(), 47218, 49999)
             .unwrap();
     }
 

@@ -1,5 +1,7 @@
 use super::{BlockHeader, ByteArray, ByteVec, NiceBigUint, NiceVec};
+use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct BlockBody {
@@ -24,12 +26,15 @@ pub struct Transaction {
     pub gas_price: NiceBigUint,
     #[serde(serialize_with = "crate::types::str_serialize")]
     pub gas: u64,
-    pub to: ByteArray<20>,
+    #[serde(deserialize_with = "deserialize_transaction")]
+    pub to: To,
     pub value: NiceBigUint,
     pub data: ByteVec,
     #[serde(serialize_with = "crate::types::str_serialize")]
     v: u8,
+    #[serde(deserialize_with = "deserialize_signature")]
     r: ByteArray<32>,
+    #[serde(deserialize_with = "deserialize_signature")]
     s: ByteArray<32>,
 }
 
@@ -40,6 +45,48 @@ impl std::fmt::Display for Transaction {
             "{}",
             &serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?
         )
+    }
+}
+
+fn deserialize_transaction<'de, D: Deserializer<'de>>(deserializer: D) -> Result<To, D::Error> {
+    let buf = Vec::<u8>::deserialize(deserializer)?;
+    if buf.len() == 1 {
+        return Ok(To::ContractCreation(ByteArray::<1>([0_u8])));
+    }
+    let mut out: [u8; 20] = [0; 20];
+    out.copy_from_slice(&buf);
+    Ok(To::Address(ByteArray::<20>(out)))
+}
+
+fn deserialize_signature<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<ByteArray<32>, D::Error> {
+    let buf = Vec::<u8>::deserialize(deserializer)?;
+    if buf.len() < 32 {
+        let mut signature: Vec<u8> = vec![0; 32 - buf.len()];
+        signature.extend_from_slice(&buf);
+        return Ok(ByteArray::<32>(
+            <[u8; 32]>::try_from(signature).expect("Should be impossible."),
+        ));
+    }
+    Ok(ByteArray::<32>(
+        <[u8; 32]>::try_from(buf).expect("Should be impossible."),
+    ))
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum To {
+    Address(ByteArray<20>),
+    ContractCreation(ByteArray<1>),
+}
+
+impl std::fmt::Display for To {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            To::Address(bytes) => write!(f, "{}", bytes),
+            To::ContractCreation(bytes) => write!(f, "{}", bytes),
+        }
     }
 }
 
@@ -62,7 +109,7 @@ mod tests {
             0xfc, 0xe8, 0x05, 0xda, 0xef, 0x70, 0x16, 0xb9, 0xb6, 0x75, 0xc1, 0x37, 0xa6, 0xa4,
             0x1a, 0x54, 0x8f, 0x7b, 0x60, 0xa3, 0x48, 0x4c, 0x06, 0xa3, 0x3a, 0xc0,
         ];
-        let mut body_deserializer = RlpDeserializer::new(&body_input);
+        let mut body_deserializer = RlpDeserializer::new(&body_input).unwrap();
         let body = BlockBody::deserialize(&mut body_deserializer).unwrap();
 
         let body_expected = BlockBody {
@@ -70,10 +117,10 @@ mod tests {
                 nonce: 0,
                 gas_price: NiceBigUint(BigUint::from(50000000000000_u64)),
                 gas: 21000,
-                to: ByteArray::<20>([
+                to: To::Address(ByteArray::<20>([
                     0x5d, 0xf9, 0xb8, 0x79, 0x91, 0x26, 0x2f, 0x6b, 0xa4, 0x71, 0xf0, 0x97, 0x58,
                     0xcd, 0xe1, 0xc0, 0xfc, 0x1d, 0xe7, 0x34,
-                ]),
+                ])),
                 value: NiceBigUint(BigUint::from(31337_u32)),
                 data: ByteVec(vec![0_u8]),
                 v: 28_u8,

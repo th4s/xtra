@@ -116,7 +116,7 @@ mod tests {
             logs: NiceVec(vec![]),
         }]));
 
-        let mut receipt_deserializer = RlpDeserializer::new(&receipt_input);
+        let mut receipt_deserializer = RlpDeserializer::new(&receipt_input).unwrap();
         let receipt = Receipts::deserialize(&mut receipt_deserializer).unwrap();
 
         assert_eq!(receipt, receipt_expected);

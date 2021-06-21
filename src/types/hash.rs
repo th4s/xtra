@@ -34,8 +34,8 @@ mod tests {
             0x4e, 0x12, 0x71, 0x43, 0x86, 0xa9, 0xfd, 0xf7, 0x21, 0x92, 0xf2, 0xe8, 0xf7, 0xda,
             0x78, 0x22, 0xf1, 0x0b, 0x4d,
         ];
-        let mut hash_deserializer1 = RlpDeserializer::new(&hash1_input);
-        let mut hash_deserializer2 = RlpDeserializer::new(&hash2_input);
+        let mut hash_deserializer1 = RlpDeserializer::new(&hash1_input).unwrap();
+        let mut hash_deserializer2 = RlpDeserializer::new(&hash2_input).unwrap();
 
         let hash1 = BlockHash::deserialize(&mut hash_deserializer1).unwrap();
         let hash2 = BlockHash::deserialize(&mut hash_deserializer2).unwrap();
