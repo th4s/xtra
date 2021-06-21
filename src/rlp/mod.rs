@@ -25,7 +25,10 @@ impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
     where
         T: serde::de::DeserializeSeed<'de>,
     {
-        if self.de.last_element_len()? == 0 {
+        if let Some(Rlp::List(&[])) = self.de.parsed.last() {
+            self.de.parsed.pop().ok_or(RlpError::NoInputLeft)?;
+        }
+        if let Some(Rlp::List(&[]) | Rlp::Bytes(&[]) | Rlp::EmptyList) = self.de.parsed.last() {
             self.de.parsed.pop().ok_or(RlpError::NoInputLeft)?;
             if !self.iterate {
                 return Ok(None);
@@ -54,30 +57,16 @@ impl<'de> RlpDeserializer<'de> {
             self.parsed,
             self.rest
         );
-        if let Some(last_element) = self.parsed.last_mut() {
-            if let Rlp::List(inner) = last_element {
-                let (parsed, slice) = parse(inner)?;
-                *inner = slice;
-                self.parsed.push(parsed);
-                return Ok(());
-            }
+        if let Some(Rlp::List(inner)) = self.parsed.last_mut() {
+            let (parsed, slice) = parse(inner)?;
+            *inner = slice;
+            self.parsed.push(parsed);
+            return Ok(());
         }
         let (parsed, slice) = parse(self.rest)?;
         self.parsed.push(parsed);
         self.rest = slice;
         Ok(())
-    }
-
-    fn last_element_len(&self) -> Result<usize, RlpError> {
-        if let Some(last_element) = self.parsed.last() {
-            return match last_element {
-                Rlp::Bytes(inner) => Ok(inner.len()),
-                Rlp::List(inner) => Ok(inner.len()),
-                Rlp::Empty => Ok(1),
-                Rlp::EmptyList => Ok(0),
-            };
-        }
-        Err(RlpError::NoInputLeft)
     }
 }
 
@@ -158,7 +147,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         match self.parsed.last_mut() {
             Some(Rlp::Bytes(bytes)) => {
                 let new_u32 = u32_from_bytes_end_be_padded(&bytes).map_err(RlpError::Conversion)?;
-                *bytes = &bytes[..bytes.len().checked_sub(4).unwrap_or(0)];
+                *bytes = &bytes[..bytes.len().saturating_sub(4)];
                 visitor.visit_u32(new_u32)
             }
             Some(empty @ Rlp::Empty) => {
@@ -176,7 +165,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
         match self.parsed.last_mut() {
             Some(Rlp::Bytes(bytes)) => {
                 let new_u64 = u64_from_bytes_end_be_padded(&bytes).map_err(RlpError::Conversion)?;
-                *bytes = &bytes[..bytes.len().checked_sub(8).unwrap_or(0)];
+                *bytes = &bytes[..bytes.len().saturating_sub(8)];
                 visitor.visit_u64(new_u64)
             }
             Some(empty @ Rlp::Empty) => {

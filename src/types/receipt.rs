@@ -38,10 +38,7 @@ fn deserialize_post_state<'de, D: Deserializer<'de>>(
 ) -> Result<PostState, D::Error> {
     let buf = Vec::<u8>::deserialize(deserializer)?;
     if buf.len() == 1 {
-        return Ok(PostState::Success(match buf[0] {
-            0x01 => true,
-            _ => false,
-        }));
+        return Ok(PostState::Success(matches!(buf[0], 0x01)));
     }
     let mut out: [u8; 32] = [0; 32];
     out.copy_from_slice(&buf);

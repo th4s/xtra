@@ -23,7 +23,7 @@ impl<'a> std::fmt::Debug for Rlp<'a> {
 }
 
 /// Parse the first Rlp match of a slice
-pub(crate) fn parse<'a>(rlp_slice: &'a [u8]) -> Result<(Rlp<'a>, &'a [u8]), RlpError> {
+pub(crate) fn parse(rlp_slice: &[u8]) -> Result<(Rlp, &[u8]), RlpError> {
     let len = rlp_slice.len();
     trace!("Parsing slice of length {}: {:?}", len, &rlp_slice);
 
