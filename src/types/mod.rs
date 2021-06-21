@@ -13,6 +13,7 @@ pub use hash::BlockHash;
 pub use header::BlockHeader;
 pub use receipt::TransactionReceipt;
 
+/// A const-sized byte array for types of known byte length
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(transparent)]
 pub struct ByteArray<const N: usize>(#[serde(with = "serde_arrays")] pub [u8; N]);
@@ -36,6 +37,7 @@ impl<const N: usize> Serialize for ByteArray<N> {
     }
 }
 
+/// A byte vector for types of unknown byte length
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(transparent)]
 pub struct ByteVec(#[serde(serialize_with = "str_serialize")] pub Vec<u8>);
@@ -59,6 +61,7 @@ impl Serialize for ByteVec {
     }
 }
 
+/// A vector which can pretty-print for JSON serialization
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct NiceVec<T>(pub Vec<T>);
@@ -75,6 +78,7 @@ impl<T: std::fmt::Display + Serialize> std::fmt::Display for NiceVec<T> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(transparent)]
+/// A big uint which can pretty-print for JSON serialization
 pub struct NiceBigUint(#[serde(serialize_with = "str_serialize")] BigUint);
 
 impl std::fmt::Display for NiceBigUint {

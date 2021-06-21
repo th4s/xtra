@@ -3,8 +3,22 @@ name = "xtra"
 version = "0.1.0"
 authors = ["th4s <th4s@metavoid.xyz>"]
 edition = "2018"
+description = "A command line tool to extract data from the geth freezer folder"
+repository = "https://github.com/th4s/xtra"
+license = "MIT"
+keywords = ["geth", "freezer", "ethereum"]
+categories = ["cryptography::cryptocurrencies", "command-line-utilities"]
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "xtralib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "xtra"
+path = "src/main.rs"
 
 [dependencies]
 log = "0.4"
@@ -14,7 +28,4 @@ snap = "1"
 serde = { version = "1", features = ["derive"] }
 serde_arrays = "0.1"
 serde_json = "1"
-
-[dev-dependencies]
-dotenv = "0.15"
 

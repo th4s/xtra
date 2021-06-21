@@ -7,41 +7,15 @@ use thiserror::Error;
 mod parse;
 use parse::{parse, Rlp};
 
+/// A deserializer used to convert from RLP bytes into the different types
 #[derive(Debug)]
 pub(crate) struct RlpDeserializer<'de> {
     parsed: Vec<Rlp<'de>>,
     rest: &'de [u8],
 }
 
-struct SeqAccessor<'a, 'de: 'a> {
-    de: &'a mut RlpDeserializer<'de>,
-    iterate: bool,
-}
-
-impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
-    type Error = RlpError;
-
-    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
-    where
-        T: serde::de::DeserializeSeed<'de>,
-    {
-        if let Some(Rlp::List(&[])) = self.de.parsed.last() {
-            self.de.parsed.pop().ok_or(RlpError::NoInputLeft)?;
-        }
-        if let Some(Rlp::List(&[]) | Rlp::Bytes(&[]) | Rlp::EmptyList) = self.de.parsed.last() {
-            self.de.parsed.pop().ok_or(RlpError::NoInputLeft)?;
-            if !self.iterate {
-                return Ok(None);
-            }
-        }
-        if self.iterate {
-            self.de.parse()?;
-        }
-        seed.deserialize(&mut *self.de).map(Some)
-    }
-}
-
 impl<'de> RlpDeserializer<'de> {
+    /// Create a new rlp deserializer from some byte slice
     pub(crate) fn new(bytes: &'de [u8]) -> Result<RlpDeserializer, RlpError> {
         trace!("Creating new rlp deserializer for {:?}", &bytes);
         let rlp_deserializer = RlpDeserializer {
@@ -347,6 +321,34 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     }
 }
 
+struct SeqAccessor<'a, 'de: 'a> {
+    de: &'a mut RlpDeserializer<'de>,
+    iterate: bool,
+}
+
+impl<'de: 'a, 'a> SeqAccess<'de> for SeqAccessor<'a, 'de> {
+    type Error = RlpError;
+
+    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
+    where
+        T: serde::de::DeserializeSeed<'de>,
+    {
+        if let Some(Rlp::List(&[])) = self.de.parsed.last() {
+            self.de.parsed.pop().ok_or(RlpError::NoInputLeft)?;
+        }
+        if let Some(Rlp::List(&[]) | Rlp::Bytes(&[]) | Rlp::EmptyList) = self.de.parsed.last() {
+            self.de.parsed.pop().ok_or(RlpError::NoInputLeft)?;
+            if !self.iterate {
+                return Ok(None);
+            }
+        }
+        if self.iterate {
+            self.de.parse()?;
+        }
+        seed.deserialize(&mut *self.de).map(Some)
+    }
+}
+
 /// Enum for collecting RLP errors
 #[derive(Debug, Error)]
 pub enum RlpError {
@@ -354,7 +356,7 @@ pub enum RlpError {
     NoMatch,
     #[error("No input left to parse")]
     NoInputLeft,
-    #[error("Unexptected match")]
+    #[error("Unexpected match")]
     UnexpectedMatch,
     #[error("Type conversion error: {0}")]
     Conversion(#[source] NumericError),

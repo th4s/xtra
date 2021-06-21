@@ -1,6 +1,7 @@
 use super::ByteArray;
 use serde::{Deserialize, Serialize};
 
+/// The block hash of an Ethereum block
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct BlockHash(pub ByteArray<32>);
 

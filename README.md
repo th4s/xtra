@@ -1,3 +1,3 @@
 # Xtra
 
-A local and lightweight indexer for the Ethereum blockchain.
+A command line tool to extract data from the geth freezer folder

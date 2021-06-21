@@ -6,22 +6,12 @@ use snap::raw::Decoder;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use thiserror::Error;
 
 // A single index consists of 2 bytes (u16) for the file number and 4 bytes (u32) for the offset
 const FILE_NUMBER_BYTE_SIZE: u64 = 2;
 const OFFSET_NUMBER_BYTE_SIZE: u64 = 4;
-
-pub struct Freezer {
-    ancient_folder: PathBuf,
-}
-
-impl Freezer {
-    pub fn new(ancient_folder: PathBuf) -> Self {
-        Freezer { ancient_folder }
-    }
-}
 
 /// Allows to export block parts from the `chaindata/ancient` folder from geth
 ///
@@ -341,7 +331,7 @@ mod tests {
         let path_buf = PathBuf::from("./fixtures/bodies");
         // Check if we can read 50k blocks without errors
         let _bodies = BlockPart::Bodies
-            .load::<BlockBody>(path_buf.as_path(), 47218, 49999)
+            .load::<BlockBody>(path_buf.as_path(), 0, 49999)
             .unwrap();
     }
 

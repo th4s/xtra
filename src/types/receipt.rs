@@ -2,6 +2,7 @@ use super::{ByteArray, ByteVec, NiceBigUint, NiceVec};
 use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 
+/// The transaction receipt of an Ethereum transaction
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Receipts(NiceVec<TransactionReceipt>);
 

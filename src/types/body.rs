@@ -3,6 +3,7 @@ use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
+/// The body of an Ethereum block
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct BlockBody {
     pub transactions: NiceVec<Transaction>,

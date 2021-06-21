@@ -1,6 +1,7 @@
 use super::NiceBigUint;
 use serde::Deserialize;
 
+/// The total difficulty of an Ethereum block
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct TotalDifficulty(pub NiceBigUint);
 

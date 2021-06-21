@@ -1,7 +1,7 @@
 use super::{ByteArray, ByteVec, NiceBigUint};
 use serde::{Deserialize, Serialize};
 
-/// The block header
+/// The header of an Ethereum block
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct BlockHeader {
     pub parent_hash: ByteArray<32>,

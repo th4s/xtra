@@ -3,7 +3,7 @@ use crate::numeric::usize_from_bytes_be_padded;
 use log::trace;
 
 /// An enum for matching recursive length prefix encoded bytes
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq)]
 pub(crate) enum Rlp<'a> {
     Bytes(&'a [u8]),
     List(&'a [u8]),
@@ -22,7 +22,7 @@ impl<'a> std::fmt::Debug for Rlp<'a> {
     }
 }
 
-/// Parse the first Rlp match of a slice
+/// Parse the first rlp match of a slice
 pub(crate) fn parse(rlp_slice: &[u8]) -> Result<(Rlp, &[u8]), RlpError> {
     let len = rlp_slice.len();
     trace!("Parsing slice of length {}: {:?}", len, &rlp_slice);
