@@ -1,5 +1,5 @@
 use super::NiceBigUint;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// The total difficulty of an Ethereum block
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -8,6 +8,15 @@ pub struct TotalDifficulty(pub NiceBigUint);
 impl std::fmt::Display for TotalDifficulty {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl Serialize for TotalDifficulty {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.collect_str(self)
     }
 }
 

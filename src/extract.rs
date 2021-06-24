@@ -1,7 +1,9 @@
 use crate::numeric::{u16_from_bytes_be, u32_from_bytes_be, NumericError};
 use crate::rlp::RlpDeserializer;
+use crate::types::NiceVec;
 use log::{debug, info, trace};
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use snap::raw::Decoder;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
@@ -29,12 +31,12 @@ impl BlockPart {
     /// Loads a range of block parts from min_block (inclusive) to max_block (exclusive).
     /// Returns two vecs. The second vec contains the raw block data and the first vec
     /// contains the byte offset of the first byte for every block in the second vec.
-    pub fn load<T: DeserializeOwned>(
+    pub fn load<T: DeserializeOwned + Display + Serialize>(
         &self,
         ancient_folder: &Path,
         min_block: u64,
         max_block: u64,
-    ) -> Result<Vec<T>, FreezerError> {
+    ) -> Result<String, FreezerError> {
         if min_block >= max_block {
             return Err(FreezerError::BlockRange);
         }
@@ -75,10 +77,10 @@ impl BlockPart {
 
         // Decompress if necessary and turn into vec of blobs
         let block_objects =
-            self.postprocess_data(block_data.as_slice(), block_offsets.as_slice())?;
+            self.postprocess_data::<T>(block_data.as_slice(), block_offsets.as_slice())?;
 
         info!("Reading successful");
-        Ok(block_objects)
+        Ok(NiceVec(block_objects).to_string())
     }
 
     fn load_index_raw(
