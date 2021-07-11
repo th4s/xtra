@@ -1,4 +1,4 @@
-use xtralib::types::{BlockBody, BlockHash, BlockHeader, TotalDifficulty, TransactionReceipt};
+use xtralib::types::{BlockBody, BlockHash, BlockHeader, Receipts, TotalDifficulty};
 use xtralib::Freezer;
 
 fn main() {
@@ -39,11 +39,9 @@ fn main() {
             block_numbers.0,
             block_numbers.1,
         ),
-        Freezer::Receipts => Freezer::Receipts.load::<TransactionReceipt>(
-            ancient_folder,
-            block_numbers.0,
-            block_numbers.1,
-        ),
+        Freezer::Receipts => {
+            Freezer::Receipts.load::<Receipts>(ancient_folder, block_numbers.0, block_numbers.1)
+        }
     }
     .unwrap()
         + "\n";

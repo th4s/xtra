@@ -11,7 +11,7 @@ pub use body::BlockBody;
 pub use difficulty::TotalDifficulty;
 pub use hash::BlockHash;
 pub use header::BlockHeader;
-pub use receipt::TransactionReceipt;
+pub use receipt::Receipts;
 
 /// A const-sized byte array for types of known byte length
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -73,6 +73,12 @@ impl<T: std::fmt::Display + Serialize> std::fmt::Display for NiceVec<T> {
             "{}",
             &serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?
         )
+    }
+}
+
+impl<T> Default for NiceVec<T> {
+    fn default() -> Self {
+        NiceVec(vec![])
     }
 }
 
