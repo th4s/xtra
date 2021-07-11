@@ -18,7 +18,7 @@ const OFFSET_NUMBER_BYTE_SIZE: u64 = 4;
 /// Allows to export block parts from the `chaindata/ancient` folder from geth
 ///
 /// The variant decides about which block parts you want to export.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BlockPart {
     Bodies,
     Headers,
@@ -192,6 +192,15 @@ impl BlockPart {
 
         let rlp_deserialize = |input: &[u8]| -> Result<T, FreezerError> {
             debug!("Deserializing...");
+            // Ugly hack to adapt hashes in freezer to RLP format. Somehow geth does not export
+            // hashes to the freezer in correct RLP format
+            let mut tmp = vec![];
+            let input = if *self == BlockPart::Hashes {
+                tmp.extend_from_slice(&[&[0xa0_u8], input].concat());
+                tmp.as_slice()
+            } else {
+                input
+            };
             let mut deserializer =
                 RlpDeserializer::new(input).map_err(FreezerError::RlpDeserialization)?;
             T::deserialize(&mut deserializer).map_err(FreezerError::RlpDeserialization)
