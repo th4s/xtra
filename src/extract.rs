@@ -181,18 +181,17 @@ impl BlockPart {
         let mut block_objects: Vec<T> = Vec::new();
         let decompressor = |input: &[u8]| -> Result<Vec<u8>, FreezerError> {
             if self.is_compressed() {
-                debug!("Decompressing data...");
+                debug!("Decompressing...");
                 Decoder::new()
                     .decompress_vec(input)
                     .map_err(FreezerError::SnappyDecompress)
             } else {
-                let mut out = Vec::with_capacity(input.len());
-                out.copy_from_slice(input);
-                Ok(out)
+                Ok(input.to_vec())
             }
         };
 
         let rlp_deserialize = |input: &[u8]| -> Result<T, FreezerError> {
+            debug!("Deserializing...");
             let mut deserializer =
                 RlpDeserializer::new(input).map_err(FreezerError::RlpDeserialization)?;
             T::deserialize(&mut deserializer).map_err(FreezerError::RlpDeserialization)

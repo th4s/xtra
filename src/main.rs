@@ -4,7 +4,7 @@ use xtralib::Freezer;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
-    if args.len() != 5 {
+    if args.len() != 5 || ["--help", "-help", "-h", "h"].contains(&args[1].as_str()) {
         print_info();
         return;
     }

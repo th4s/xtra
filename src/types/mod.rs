@@ -83,7 +83,7 @@ pub struct NiceBigUint(#[serde(serialize_with = "str_serialize")] BigUint);
 
 impl std::fmt::Display for NiceBigUint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "\"{}\"", &self.0.to_str_radix(10))
+        write!(f, "{}", &self.0.to_str_radix(10))
     }
 }
 
