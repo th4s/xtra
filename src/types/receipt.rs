@@ -65,20 +65,24 @@ impl std::fmt::Display for PostState {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Log {
     address: ByteArray<20>,
-    topics: NiceVec<ByteArray<64>>,
+    topics: Topics,
     data: ByteVec,
-    #[serde(serialize_with = "crate::types::str_serialize")]
-    block_number: u64,
-    tx_hash: ByteArray<32>,
-    #[serde(serialize_with = "crate::types::str_serialize")]
-    tx_index: u64,
-    block_hash: ByteArray<32>,
-    #[serde(serialize_with = "crate::types::str_serialize")]
-    log_index: u64,
-    removed: bool,
 }
 
 impl std::fmt::Display for Log {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            &serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct Topics(ByteArray<32>);
+
+impl std::fmt::Display for Topics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
