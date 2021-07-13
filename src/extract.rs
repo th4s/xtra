@@ -1,7 +1,6 @@
 use crate::numeric::{u16_from_bytes_be, u32_from_bytes_be, NumericError};
 use crate::rlp::RlpDeserializer;
-use crate::types::NiceVec;
-use log::{debug, info, trace};
+use log::{debug, trace};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use snap::raw::Decoder;
@@ -31,160 +30,111 @@ pub enum BlockPart {
 #[derive(Debug, Clone, PartialEq)]
 pub struct JobList {
     pub ancient_folder: PathBuf,
-    pub pages: Vec<Job>,
+    pub jobs: Vec<Job>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Job {
     pub file_number: u16,
-    pub offsets: (Option<u64>, Option<u64>),
+    pub index: Vec<u64>,
 }
 
 impl BlockPart {
     /// Lodads the whole index file into memory
-    pub fn load_index(
+    pub fn create_jobs(
         &self,
         ancient_folder: &Path,
         min_block: u64,
         max_block: u64,
     ) -> Result<JobList, FreezerError> {
+        if min_block >= max_block {
+            return Err(FreezerError::BlockRange);
+        }
+        // Calculate some constans we need and open index file
         let index_size =
             (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * (max_block - min_block);
         let index_shift = (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * min_block;
         let index_filename = ancient_folder.join(self.index_filename());
         let mut index_file = File::open(index_filename).map_err(FreezerError::OpenFile)?;
 
-        // Get first and last offset
-        let (first_file_number, first_offset) =
-            jump_to_block_number_and_read_single_index(&mut index_file, min_block)?;
-        let (last_file_number, last_offset) =
-            jump_to_block_number_and_read_single_index(&mut index_file, max_block)?;
-
-        // Load the raw index data into RAM
-        let block_offsets_raw = self.load_index_raw(index_size, index_shift, &mut index_file)?;
-
-        // Adapt the index offsets
-        let offsets =
-            self.postprocess_index(ancient_folder, index_size, first_offset, block_offsets_raw)?;
-
-        Ok(JobList {})
-    }
-
-    /// Loads the data from freezer
-    pub fn load<T: DeserializeOwned + Display + Serialize>(
-        &self,
-        index: &JobList,
-    ) -> Result<NiceVec<T>, FreezerError> {
-        let (min_block, max_block) = index.block_range;
-        let (first_offset, last_offset) = index.offset_range;
-        let (first_file_number, last_file_number) = index.file_number_range;
-
-        if min_block >= max_block {
-            return Err(FreezerError::BlockRange);
-        }
-        info!(
-            "Reading {} of blocks {}-{}...",
-            format!("{}", self),
-            min_block,
-            max_block
-        );
-
-        // Load the raw block data into RAM
-        let block_data = self.load_data(
-            &index.ancient_folder,
-            first_file_number,
-            last_file_number,
-            first_offset,
-            last_offset,
-        )?;
-
-        // Decompress if necessary and turn into vec of blobs
-        let block_objects =
-            self.postprocess_data::<T>(block_data.as_slice(), index.offsets.as_slice())?;
-
-        info!("Reading successful");
-        Ok(NiceVec(block_objects))
-    }
-
-    fn load_index_raw(
-        &self,
-        index_size: u64,
-        index_shift: u64,
-        index_file: &mut File,
-    ) -> Result<Vec<u8>, FreezerError> {
-        debug!(
-            "Reading {} bytes starting at byte {} to build index...",
-            index_size, index_shift
-        );
-
+        // Load the part of the index we need into a byte buffer
         let mut raw_index: Vec<u8> = Vec::with_capacity(index_size as usize);
-
         let _ = index_file
             .seek(SeekFrom::Start(index_shift))
             .map_err(FreezerError::SeekFile)?;
         let _ = index_file
-            .take(index_size)
+            .take(index_size + 1)
             .read_to_end(&mut raw_index)
             .map_err(FreezerError::ReadFile)?;
-        Ok(raw_index)
-    }
 
-    fn postprocess_index(
-        &self,
-        ancient_folder: &Path,
-        index_size: u64,
-        first_offset: u64,
-        raw_index: Vec<u8>,
-    ) -> Result<Vec<u64>, FreezerError> {
-        debug!("Postprocessing index...");
-        let mut block_offsets: Vec<u64> = Vec::with_capacity(index_size as usize);
-        let mut offset_shift: i64 = -(first_offset as i64);
+        // Create jobs
+        let mut job_list = JobList {
+            ancient_folder: PathBuf::from(ancient_folder),
+            jobs: vec![],
+        };
 
         for chunk in raw_index.chunks((FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) as usize) {
             let file_number = u16_from_bytes_be(&chunk[..FILE_NUMBER_BYTE_SIZE as usize])
                 .map_err(FreezerError::Conversion)?;
             let offset = u32_from_bytes_be(&chunk[FILE_NUMBER_BYTE_SIZE as usize..])
-                .map_err(FreezerError::Conversion)? as i64;
-
-            if offset == 0 && !block_offsets.is_empty() {
-                let data_file_name = ancient_folder.join(self.data_filename(file_number - 1));
-                let data_file = File::open(data_file_name).map_err(FreezerError::OpenFile)?;
-                let file_len = data_file
-                    .metadata()
-                    .map_err(FreezerError::FileMetadata)?
-                    .len();
-                offset_shift =
-                    (file_len - *block_offsets.last().ok_or(FreezerError::BlockOffset)?) as i64;
+                .map_err(FreezerError::Conversion)? as u64;
+            if let Some(job) = job_list.jobs.last_mut() {
+                if job.file_number != file_number {
+                    let data_file_name = ancient_folder.join(self.data_filename(job.file_number));
+                    let data_file = File::open(data_file_name).map_err(FreezerError::OpenFile)?;
+                    let file_len = data_file
+                        .metadata()
+                        .map_err(FreezerError::FileMetadata)?
+                        .len();
+                    job.index.push(file_len);
+                }
             }
-            block_offsets.push((offset + offset_shift) as u64);
+            if job_list
+                .jobs
+                .iter()
+                .filter(|x| x.file_number == file_number)
+                .next()
+                .is_none()
+            {
+                let job = Job {
+                    file_number,
+                    index: vec![offset],
+                };
+                job_list.jobs.push(job);
+                continue;
+            }
+
+            job_list
+                .jobs
+                .iter_mut()
+                .filter(|x| x.file_number == file_number)
+                .for_each(|x| x.index.push(offset));
         }
-        Ok(block_offsets)
+        Ok(job_list)
     }
 
-    fn load_data(
-        &self,
-        ancient_folder: &Path,
-        file_number: u16,
-        first_offset: Option<u64>,
-        last_offset: Option<u64>,
-    ) -> Result<Vec<u8>, FreezerError> {
-        debug!("Reading raw block data from file number {}...", file_number);
+    /// Loads the data from freezer
+    fn load_data(&self, ancient_folder: &Path, job: &Job) -> Result<Vec<u8>, FreezerError> {
+        debug!(
+            "Reading raw block data from file number {}...",
+            job.file_number
+        );
         let mut block_data: Vec<u8> = Vec::new();
 
-        let data_file_name = ancient_folder.join(self.data_filename(file_number));
+        let data_file_name = ancient_folder.join(self.data_filename(job.file_number));
         let mut data_file = File::open(data_file_name).map_err(FreezerError::OpenFile)?;
 
         let _ = seek_and_read(
             &mut data_file,
             &mut block_data,
-            first_offset.unwrap_or(0),
-            last_offset,
+            *job.index.first().ok_or(FreezerError::BlockOffset)?,
+            *job.index.last().ok_or(FreezerError::BlockOffset)?,
         )?;
         debug!("Read {} bytes of data", block_data.len());
         Ok(block_data)
     }
 
-    fn postprocess_data<T: DeserializeOwned>(
+    fn postprocess_data<T: DeserializeOwned + Display + Serialize>(
         &self,
         block_data: &[u8],
         block_offsets: &[u64],
@@ -303,19 +253,15 @@ fn seek_and_read(
     file: &mut File,
     buffer: &mut Vec<u8>,
     start: u64,
-    end: Option<u64>,
+    end: u64,
 ) -> Result<usize, FreezerError> {
     trace!("Reading data in file, beginning at byte {}...", start);
     let _ = file
         .seek(SeekFrom::Start(start))
         .map_err(FreezerError::SeekFile)?;
-    match end {
-        Some(pos) => file
-            .take(pos - start)
-            .read_to_end(buffer)
-            .map_err(FreezerError::ReadFile),
-        None => file.read_to_end(buffer).map_err(FreezerError::ReadFile),
-    }
+    file.take(end - start)
+        .read_to_end(buffer)
+        .map_err(FreezerError::ReadFile)
 }
 
 /// Collects different errors
@@ -344,26 +290,7 @@ pub enum FreezerError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{BlockBody, BlockHeader};
     use std::path::PathBuf;
-
-    #[test]
-    fn test_freezer_export_bodies() {
-        let path_buf = PathBuf::from("./fixtures/bodies");
-        // Check if we can read 50k blocks without errors
-        let _bodies = BlockPart::Bodies
-            .load::<BlockBody>(path_buf.as_path(), 0, 49999)
-            .unwrap();
-    }
-
-    #[test]
-    fn test_freezer_export_headers() {
-        let path_buf = PathBuf::from("./fixtures/headers");
-        // Check if we can read some headers without errors
-        let _headers = BlockPart::Headers
-            .load::<BlockHeader>(path_buf.as_path(), 0, 99)
-            .unwrap();
-    }
 
     #[test]
     fn test_freezer_jump_to_block_number_and_read_single_index() {
@@ -381,7 +308,7 @@ mod tests {
         let mut file = File::open(file_name).unwrap();
         let mut buffer = Vec::<u8>::new();
 
-        let _ = seek_and_read(&mut file, &mut buffer, 5, Some(15)).unwrap();
+        let _ = seek_and_read(&mut file, &mut buffer, 5, 15).unwrap();
         let expected: Vec<u8> = vec![3, 8, 194, 192, 192, 3, 8, 194, 192, 192];
         assert_eq!(buffer, expected);
     }
