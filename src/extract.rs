@@ -8,7 +8,7 @@ use snap::raw::Decoder;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 // A single index consists of 2 bytes (u16) for the file number and 4 bytes (u32) for the offset
@@ -27,26 +27,27 @@ pub enum BlockPart {
     Receipts,
 }
 
+/// The index struct
+#[derive(Debug, Clone, PartialEq)]
+pub struct JobList {
+    pub ancient_folder: PathBuf,
+    pub pages: Vec<Job>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Job {
+    pub file_number: u16,
+    pub offsets: (Option<u64>, Option<u64>),
+}
+
 impl BlockPart {
-    /// Loads a range of block parts from min_block (inclusive) to max_block (exclusive).
-    /// Returns two vecs. The second vec contains the raw block data and the first vec
-    /// contains the byte offset of the first byte for every block in the second vec.
-    pub fn load<T: DeserializeOwned + Display + Serialize>(
+    /// Lodads the whole index file into memory
+    pub fn load_index(
         &self,
         ancient_folder: &Path,
         min_block: u64,
         max_block: u64,
-    ) -> Result<String, FreezerError> {
-        if min_block >= max_block {
-            return Err(FreezerError::BlockRange);
-        }
-        info!(
-            "Reading {} of blocks {}-{}...",
-            format!("{}", self),
-            min_block,
-            max_block
-        );
-
+    ) -> Result<JobList, FreezerError> {
         let index_size =
             (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * (max_block - min_block);
         let index_shift = (FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) * min_block;
@@ -63,12 +64,34 @@ impl BlockPart {
         let block_offsets_raw = self.load_index_raw(index_size, index_shift, &mut index_file)?;
 
         // Adapt the index offsets
-        let block_offsets =
+        let offsets =
             self.postprocess_index(ancient_folder, index_size, first_offset, block_offsets_raw)?;
+
+        Ok(JobList {})
+    }
+
+    /// Loads the data from freezer
+    pub fn load<T: DeserializeOwned + Display + Serialize>(
+        &self,
+        index: &JobList,
+    ) -> Result<NiceVec<T>, FreezerError> {
+        let (min_block, max_block) = index.block_range;
+        let (first_offset, last_offset) = index.offset_range;
+        let (first_file_number, last_file_number) = index.file_number_range;
+
+        if min_block >= max_block {
+            return Err(FreezerError::BlockRange);
+        }
+        info!(
+            "Reading {} of blocks {}-{}...",
+            format!("{}", self),
+            min_block,
+            max_block
+        );
 
         // Load the raw block data into RAM
         let block_data = self.load_data(
-            ancient_folder,
+            &index.ancient_folder,
             first_file_number,
             last_file_number,
             first_offset,
@@ -77,10 +100,10 @@ impl BlockPart {
 
         // Decompress if necessary and turn into vec of blobs
         let block_objects =
-            self.postprocess_data::<T>(block_data.as_slice(), block_offsets.as_slice())?;
+            self.postprocess_data::<T>(block_data.as_slice(), index.offsets.as_slice())?;
 
         info!("Reading successful");
-        Ok(NiceVec(block_objects).to_string())
+        Ok(NiceVec(block_objects))
     }
 
     fn load_index_raw(
@@ -141,34 +164,22 @@ impl BlockPart {
     fn load_data(
         &self,
         ancient_folder: &Path,
-        first_file_number: u16,
-        last_file_number: u16,
-        first_offset: u64,
-        last_offset: u64,
+        file_number: u16,
+        first_offset: Option<u64>,
+        last_offset: Option<u64>,
     ) -> Result<Vec<u8>, FreezerError> {
-        debug!("Reading raw block data from file number {} with offset {} until file number {} with offset {}...",
-               first_file_number, first_offset, last_file_number, last_offset);
-        let mut current_file_number = first_file_number;
+        debug!("Reading raw block data from file number {}...", file_number);
         let mut block_data: Vec<u8> = Vec::new();
 
-        while current_file_number <= last_file_number {
-            let data_file_name = ancient_folder.join(self.data_filename(current_file_number));
-            let mut data_file = File::open(data_file_name).map_err(FreezerError::OpenFile)?;
+        let data_file_name = ancient_folder.join(self.data_filename(file_number));
+        let mut data_file = File::open(data_file_name).map_err(FreezerError::OpenFile)?;
 
-            let start = if current_file_number == first_file_number {
-                first_offset
-            } else {
-                0
-            };
-
-            let end = if current_file_number == last_file_number {
-                Some(last_offset)
-            } else {
-                None
-            };
-            let _ = seek_and_read(&mut data_file, &mut block_data, start, end)?;
-            current_file_number += 1;
-        }
+        let _ = seek_and_read(
+            &mut data_file,
+            &mut block_data,
+            first_offset.unwrap_or(0),
+            last_offset,
+        )?;
         debug!("Read {} bytes of data", block_data.len());
         Ok(block_data)
     }
