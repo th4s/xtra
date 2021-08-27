@@ -20,16 +20,21 @@ fn main() {
     };
 
     if block_part.is_none() || block_numbers.is_none() {
-        println!("Invalid input. Please supply a valid combination of arguments");
+        println!("Invalid input. Please supply a valid combination of arguments\n");
         print_info();
         return;
     }
     let block_part = block_part.unwrap();
     let block_numbers = block_numbers.unwrap();
 
-    let output = load_data(&ancient_folder, block_part, block_numbers);
+    // Build index
+    let schedule = block_part.init(ancient_folder, block_numbers.0, block_numbers.1).expect("Failed to build index");
 
-    write_target.write_all(output.as_bytes()).unwrap();
+    // Load all data files into RAM
+    for job in schedule.batches.iter_mut() {
+        job.1.1 = block_part.load_data(ancient_folder, *job.0, &job.1.0).expect("Unable to load data files");
+    }
+
 }
 
 fn parse_block_numbers(block_numbers: &str) -> Option<(u64, u64)> {
@@ -67,7 +72,7 @@ fn print_info() {
 fn load_data(ancient_folder: &Path, block_part: Freezer, block_numbers: (u64, u64)) -> String {
     match block_part {
         Freezer::Bodies => Freezer::Bodies
-            .load::<BlockBody>(ancient_folder, block_numbers.0, block_numbers.1)
+            .postprocess_data::<BlockBody>
             .unwrap()
             .to_string(),
         Freezer::Headers => Freezer::Headers

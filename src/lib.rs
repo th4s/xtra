@@ -3,4 +3,4 @@ pub mod numeric;
 pub mod rlp;
 pub mod types;
 
-pub use extract::BlockPart as Freezer;
+pub use extract::{Freezer, FreezerError};
