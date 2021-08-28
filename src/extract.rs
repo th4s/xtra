@@ -28,20 +28,24 @@ pub enum Freezer {
 }
 
 /// The index struct
+///
+/// Used to store ancient chaindata folder as well as filenumbers and offsets.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Schedule {
+pub struct Index {
     pub ancient_folder: PathBuf,
-    pub batches: HashMap<u16, Vec<u64>>,
+    pub offsets: HashMap<u16, Vec<u64>>,
 }
 
 impl Freezer {
-    /// Lodads the whole index file into memory
+    /// Loads the index file into memory
+    ///
+    /// This index will contain the offsets and file numbers we need to load the raw block data.
     pub fn init(
         &self,
         ancient_folder: &Path,
         min_block: u64,
         max_block: u64,
-    ) -> Result<Schedule, FreezerError> {
+    ) -> Result<Index, FreezerError> {
         if min_block >= max_block {
             return Err(FreezerError::BlockRange);
         }
@@ -68,60 +72,66 @@ impl Freezer {
             .read_to_end(&mut raw_index)
             .map_err(FreezerError::ReadFile)?;
 
-        let mut batches = HashMap::<u16, Vec<u64>>::new();
+        let mut offsets = HashMap::<u16, Vec<u64>>::new();
 
-        // Create a hashmap where every entry is a processing job. Every key points to a file and the value is a list of offsets,
-        // i.e. the block borders
+        // Convert raw index bytes into file number and offsets
         for chunk in raw_index.chunks((FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE) as usize) {
             let file_number = u16_from_bytes_be(&chunk[..FILE_NUMBER_BYTE_SIZE as usize])
                 .map_err(FreezerError::Conversion)?;
             let offset = u32_from_bytes_be(&chunk[FILE_NUMBER_BYTE_SIZE as usize..])
                 .map_err(FreezerError::Conversion)? as u64;
 
-            batches
+            offsets
                 .entry(file_number)
                 .or_insert_with(Vec::new)
                 .push(offset);
         }
 
-        let schedule = Schedule {
+        let index = Index {
             ancient_folder: ancient_folder.into(),
-            batches,
+            offsets,
         };
-        info!("Done.");
-        Ok(schedule)
+        Ok(index)
     }
 
-    /// Loads the data from freezer
+    /// Loads the raw block data
+    ///
+    /// Returns a byte vector containing the requested block data
     pub fn load_data(
         &self,
         ancient_folder: &Path,
         file_number: u16,
         offsets: &[u64],
     ) -> Result<Vec<u8>, FreezerError> {
-        info!("Reading raw block data from file number {}...", file_number);
+        info!("Reading raw block data from file number {}.", file_number);
         let mut block_data: Vec<u8> = Vec::new();
 
         let data_file_name = ancient_folder.join(self.data_filename(file_number));
         let mut data_file = File::open(data_file_name).map_err(FreezerError::OpenFile)?;
 
-        let _ = seek_and_read(
+        let read_bytes = seek_and_read(
             &mut data_file,
             &mut block_data,
             *offsets.first().ok_or(FreezerError::BlockOffset)?,
             *offsets.last().ok_or(FreezerError::BlockOffset)?,
         )?;
-        debug!("Read {} bytes of data", block_data.len());
+        debug!("Read {} bytes of data", read_bytes);
         Ok(block_data)
     }
 
-    pub fn export<T: DeserializeOwned + Display + Serialize>(
+    /// Exports the block data as json
+    ///
+    /// Returns a string
+    pub fn export_json<T: DeserializeOwned + Display + Serialize>(
         &self,
         block_offsets: &[u64],
         block_data: &[u8],
     ) -> Result<String, FreezerError> {
+        info!("Decompressing and deserializing output.");
         let offset_offset = block_offsets.first().ok_or(FreezerError::BlockOffset)?;
-        let mut block_objects = String::from("[\n");
+        let mut block_objects = String::new();
+
+        // This closure decompresses snappy if necessary
         let decompressor = |input: &[u8]| -> Result<Vec<u8>, FreezerError> {
             if self.is_compressed() {
                 trace!("Decompressing...");
@@ -134,6 +144,7 @@ impl Freezer {
             }
         };
 
+        // This closure deserializes the rlp bytes
         let rlp_deserialize = |input: &[u8]| -> Result<T, FreezerError> {
             trace!("Deserializing...");
             // Ugly hack to adapt hashes in freezer to RLP format. Somehow geth does not export
@@ -149,6 +160,7 @@ impl Freezer {
                 RlpDeserializer::new(input).map_err(FreezerError::RlpDeserialization)?;
             T::deserialize(&mut deserializer).map_err(FreezerError::RlpDeserialization)
         };
+
         for offsets in block_offsets.windows(2) {
             let blob = decompressor(
                 &block_data
@@ -156,7 +168,6 @@ impl Freezer {
             )?;
             block_objects.push_str(&(rlp_deserialize(&blob)?.to_string() + ",\n"));
         }
-        block_objects.push_str("\n]");
         Ok(block_objects)
     }
 

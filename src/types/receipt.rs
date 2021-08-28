@@ -17,7 +17,7 @@ impl std::fmt::Display for Receipts {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct TransactionReceipt {
+struct TransactionReceipt {
     #[serde(deserialize_with = "deserialize_post_state")]
     post_state: PostState,
     cum_gas_used: NiceBigUint,
@@ -48,7 +48,7 @@ fn deserialize_post_state<'de, D: Deserializer<'de>>(
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum PostState {
+enum PostState {
     State(ByteArray<32>),
     Success(bool),
 }
@@ -63,7 +63,7 @@ impl std::fmt::Display for PostState {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Log {
+struct Log {
     address: ByteArray<20>,
     topics: Topics,
     data: ByteVec,
@@ -80,7 +80,7 @@ impl std::fmt::Display for Log {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Topics(ByteArray<32>);
+struct Topics(ByteArray<32>);
 
 impl std::fmt::Display for Topics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

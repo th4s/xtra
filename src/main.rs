@@ -1,5 +1,6 @@
+use log::info;
+use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
 use std::path::Path;
-
 use xtralib::types::{BlockBody, BlockHash, BlockHeader, Receipts, TotalDifficulty};
 use xtralib::Freezer;
 
@@ -19,6 +20,17 @@ fn main() {
         file => Box::new(std::fs::File::create(file).expect("Cannot create file")),
     };
 
+    let _logger = if args[4].as_str() != "-" {
+        Some(TermLogger::init(
+            LevelFilter::Info,
+            Config::default(),
+            TerminalMode::Stdout,
+            ColorChoice::Auto,
+        ))
+    } else {
+        None
+    };
+
     if block_part.is_none() || block_numbers.is_none() {
         println!("Invalid input. Please supply a valid combination of arguments\n");
         print_info();
@@ -33,19 +45,22 @@ fn main() {
         .expect("Failed to build index");
 
     // Load all data files into RAM
-    for job in schedule.batches {
+    let _ = write_target.write_all(b"[\n");
+    for job in schedule.offsets {
         let data = block_part
             .load_data(ancient_folder, job.0, &job.1)
             .expect("Unable to load data files");
         let output = match block_part {
-            Freezer::Bodies => block_part.export::<BlockBody>(&job.1, &data),
-            Freezer::Headers => block_part.export::<BlockHeader>(&job.1, &data),
-            Freezer::Hashes => block_part.export::<BlockHash>(&job.1, &data),
-            Freezer::Difficulty => block_part.export::<TotalDifficulty>(&job.1, &data),
-            Freezer::Receipts => block_part.export::<Receipts>(&job.1, &data),
+            Freezer::Bodies => block_part.export_json::<BlockBody>(&job.1, &data),
+            Freezer::Headers => block_part.export_json::<BlockHeader>(&job.1, &data),
+            Freezer::Hashes => block_part.export_json::<BlockHash>(&job.1, &data),
+            Freezer::Difficulty => block_part.export_json::<TotalDifficulty>(&job.1, &data),
+            Freezer::Receipts => block_part.export_json::<Receipts>(&job.1, &data),
         };
         let _ = write_target.write_all(output.expect("Unable to export data").as_bytes());
     }
+    let _ = write_target.write_all(b"]");
+    info!("Finished successfully!");
 }
 
 fn parse_block_numbers(block_numbers: &str) -> Option<(u64, u64)> {
