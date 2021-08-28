@@ -57,7 +57,9 @@ fn main() {
             Freezer::Difficulty => block_part.export_json::<TotalDifficulty>(&job.1, &data),
             Freezer::Receipts => block_part.export_json::<Receipts>(&job.1, &data),
         };
+        info!("Writing to hard disk...");
         let _ = write_target.write_all(output.expect("Unable to export data").as_bytes());
+        info!("Done!");
     }
     let _ = write_target.write_all(b"]");
     info!("Finished successfully!");
@@ -91,5 +93,26 @@ fn parse_block_part(block_part: &str) -> Option<Freezer> {
 }
 
 fn print_info() {
-    println!("Help Text");
+    println!(
+        r#"
+Usage: xtra FOLDER MODE BLOCK_RANGE OUTPUT
+
+FOLDER              the geth freezer folder, usually chaindata/ancient
+
+MODE
+    b, body         export block bodies
+    h, header       export block headers
+    d, difficulty   export total difficulty
+    hash            export block hashes
+    r, receipt      export transaction receipts
+
+BLOCK_RANGE
+    number          export the single block with this number
+    number-number   export the block range
+
+OUTPUT
+    -               print to stdout
+    file            write to file
+    "#
+    );
 }

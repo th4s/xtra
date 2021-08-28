@@ -103,7 +103,10 @@ impl Freezer {
         file_number: u16,
         offsets: &[u64],
     ) -> Result<Vec<u8>, FreezerError> {
-        info!("Reading raw block data from file number {}.", file_number);
+        info!(
+            "Reading raw block data from {}.",
+            self.data_filename(file_number)
+        );
         let mut block_data: Vec<u8> = Vec::new();
 
         let data_file_name = ancient_folder.join(self.data_filename(file_number));
@@ -161,12 +164,16 @@ impl Freezer {
             T::deserialize(&mut deserializer).map_err(FreezerError::RlpDeserialization)
         };
 
-        for offsets in block_offsets.windows(2) {
+        for (k, offsets) in block_offsets.windows(2).enumerate() {
             let blob = decompressor(
                 &block_data
                     [(offsets[0] - offset_offset) as usize..(offsets[1] - offset_offset) as usize],
             )?;
             block_objects.push_str(&(rlp_deserialize(&blob)?.to_string() + ",\n"));
+
+            if k % 10000 == 0 && k > 0 {
+                info!("Processed {}k blocks.", k / 1000);
+            }
         }
         Ok(block_objects)
     }
