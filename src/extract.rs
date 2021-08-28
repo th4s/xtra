@@ -69,7 +69,6 @@ impl Freezer {
             .map_err(FreezerError::ReadFile)?;
 
         let mut batches = HashMap::<u16, Vec<u64>>::new();
-        let mut last_file_number: u16 = u16::max_value();
 
         // Create a hashmap where every entry is a processing job. Every key points to a file and the value is a list of offsets,
         // i.e. the block borders
@@ -83,20 +82,6 @@ impl Freezer {
                 .entry(file_number)
                 .or_insert_with(Vec::new)
                 .push(offset);
-
-            if file_number > last_file_number {
-                let data_file_name = ancient_folder.join(self.data_filename(last_file_number));
-                let data_file = File::open(data_file_name).map_err(FreezerError::OpenFile)?;
-                let file_len = data_file
-                    .metadata()
-                    .map_err(FreezerError::FileMetadata)?
-                    .len();
-
-                if let Some(offsets) = batches.get_mut(&last_file_number) {
-                    offsets.push(file_len);
-                }
-            }
-            last_file_number = file_number;
         }
 
         let schedule = Schedule {
@@ -104,7 +89,6 @@ impl Freezer {
             batches,
         };
         info!("Done.");
-
         Ok(schedule)
     }
 

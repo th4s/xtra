@@ -28,21 +28,21 @@ fn main() {
     let block_numbers = block_numbers.unwrap();
 
     // Build index
-    let mut schedule = block_part
+    let schedule = block_part
         .init(ancient_folder, block_numbers.0, block_numbers.1)
         .expect("Failed to build index");
 
     // Load all data files into RAM
-    for job in schedule.batches.iter_mut() {
+    for job in schedule.batches {
         let data = block_part
-            .load_data(ancient_folder, *job.0, job.1)
+            .load_data(ancient_folder, job.0, &job.1)
             .expect("Unable to load data files");
         let output = match block_part {
-            Freezer::Bodies => block_part.export::<BlockBody>(job.1, &data),
-            Freezer::Headers => block_part.export::<BlockHeader>(job.1, &data),
-            Freezer::Hashes => block_part.export::<BlockHash>(job.1, &data),
-            Freezer::Difficulty => block_part.export::<TotalDifficulty>(job.1, &data),
-            Freezer::Receipts => block_part.export::<Receipts>(job.1, &data),
+            Freezer::Bodies => block_part.export::<BlockBody>(&job.1, &data),
+            Freezer::Headers => block_part.export::<BlockHeader>(&job.1, &data),
+            Freezer::Hashes => block_part.export::<BlockHash>(&job.1, &data),
+            Freezer::Difficulty => block_part.export::<TotalDifficulty>(&job.1, &data),
+            Freezer::Receipts => block_part.export::<Receipts>(&job.1, &data),
         };
         let _ = write_target.write_all(output.expect("Unable to export data").as_bytes());
     }
