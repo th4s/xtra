@@ -120,7 +120,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     {
         match self.parsed.last_mut() {
             Some(Rlp::Bytes(bytes)) => {
-                let new_u32 = u32_from_bytes_end_be_padded(&bytes).map_err(RlpError::Conversion)?;
+                let new_u32 = u32_from_bytes_end_be_padded(bytes).map_err(RlpError::Conversion)?;
                 *bytes = &bytes[..bytes.len().saturating_sub(4)];
                 visitor.visit_u32(new_u32)
             }
@@ -138,7 +138,7 @@ impl<'de: 'a, 'a> Deserializer<'de> for &'a mut RlpDeserializer<'de> {
     {
         match self.parsed.last_mut() {
             Some(Rlp::Bytes(bytes)) => {
-                let new_u64 = u64_from_bytes_end_be_padded(&bytes).map_err(RlpError::Conversion)?;
+                let new_u64 = u64_from_bytes_end_be_padded(bytes).map_err(RlpError::Conversion)?;
                 *bytes = &bytes[..bytes.len().saturating_sub(8)];
                 visitor.visit_u64(new_u64)
             }

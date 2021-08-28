@@ -28,13 +28,24 @@ fn main() {
     let block_numbers = block_numbers.unwrap();
 
     // Build index
-    let schedule = block_part.init(ancient_folder, block_numbers.0, block_numbers.1).expect("Failed to build index");
+    let mut schedule = block_part
+        .init(ancient_folder, block_numbers.0, block_numbers.1)
+        .expect("Failed to build index");
 
     // Load all data files into RAM
     for job in schedule.batches.iter_mut() {
-        job.1.1 = block_part.load_data(ancient_folder, *job.0, &job.1.0).expect("Unable to load data files");
+        let data = block_part
+            .load_data(ancient_folder, *job.0, job.1)
+            .expect("Unable to load data files");
+        let output = match block_part {
+            Freezer::Bodies => block_part.export::<BlockBody>(job.1, &data),
+            Freezer::Headers => block_part.export::<BlockHeader>(job.1, &data),
+            Freezer::Hashes => block_part.export::<BlockHash>(job.1, &data),
+            Freezer::Difficulty => block_part.export::<TotalDifficulty>(job.1, &data),
+            Freezer::Receipts => block_part.export::<Receipts>(job.1, &data),
+        };
+        let _ = write_target.write_all(output.expect("Unable to export data").as_bytes());
     }
-
 }
 
 fn parse_block_numbers(block_numbers: &str) -> Option<(u64, u64)> {
@@ -66,30 +77,4 @@ fn parse_block_part(block_part: &str) -> Option<Freezer> {
 
 fn print_info() {
     println!("Help Text");
-}
-
-// Yep, that is ugly...
-fn load_data(ancient_folder: &Path, block_part: Freezer, block_numbers: (u64, u64)) -> String {
-    match block_part {
-        Freezer::Bodies => Freezer::Bodies
-            .postprocess_data::<BlockBody>
-            .unwrap()
-            .to_string(),
-        Freezer::Headers => Freezer::Headers
-            .load::<BlockHeader>(ancient_folder, block_numbers.0, block_numbers.1)
-            .unwrap()
-            .to_string(),
-        Freezer::Hashes => Freezer::Hashes
-            .load::<BlockHash>(ancient_folder, block_numbers.0, block_numbers.1)
-            .unwrap()
-            .to_string(),
-        Freezer::Difficulty => Freezer::Difficulty
-            .load::<TotalDifficulty>(ancient_folder, block_numbers.0, block_numbers.1)
-            .unwrap()
-            .to_string(),
-        Freezer::Receipts => Freezer::Receipts
-            .load::<Receipts>(ancient_folder, block_numbers.0, block_numbers.1)
-            .unwrap()
-            .to_string(),
-    }
 }

@@ -31,7 +31,7 @@ pub enum Freezer {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Schedule {
     pub ancient_folder: PathBuf,
-    pub batches: HashMap<u16, (Vec<u64>, Vec<u8>)>,
+    pub batches: HashMap<u16, Vec<u64>>,
 }
 
 impl Freezer {
@@ -47,7 +47,7 @@ impl Freezer {
         }
         info!(
             "Attempting to read blocks {}-{} from freezer {}.",
-            min_block, max_block, self
+            min_block, max_block, &self
         );
 
         info!("Reading index...");
@@ -64,11 +64,11 @@ impl Freezer {
             .seek(SeekFrom::Start(index_offset))
             .map_err(FreezerError::SeekFile)?;
         let _ = index_file
-            .take(index_size + 1)
+            .take(index_size + FILE_NUMBER_BYTE_SIZE + OFFSET_NUMBER_BYTE_SIZE)
             .read_to_end(&mut raw_index)
             .map_err(FreezerError::ReadFile)?;
 
-        let mut batches = HashMap::<u16, (Vec<u64>, Vec<u8>)>::new();
+        let mut batches = HashMap::<u16, Vec<u64>>::new();
         let mut last_file_number: u16 = u16::max_value();
 
         // Create a hashmap where every entry is a processing job. Every key points to a file and the value is a list of offsets,
@@ -81,8 +81,7 @@ impl Freezer {
 
             batches
                 .entry(file_number)
-                .or_insert((vec![], vec![]))
-                .0
+                .or_insert_with(Vec::new)
                 .push(offset);
 
             if file_number > last_file_number {
@@ -92,9 +91,10 @@ impl Freezer {
                     .metadata()
                     .map_err(FreezerError::FileMetadata)?
                     .len();
-                batches
-                    .get_mut(&last_file_number)
-                    .map(|offsets| offsets.0.push(file_len));
+
+                if let Some(offsets) = batches.get_mut(&last_file_number) {
+                    offsets.push(file_len);
+                }
             }
             last_file_number = file_number;
         }
@@ -131,12 +131,13 @@ impl Freezer {
         Ok(block_data)
     }
 
-    fn postprocess_data<T: DeserializeOwned + Display + Serialize>(
+    pub fn export<T: DeserializeOwned + Display + Serialize>(
         &self,
-        block_data: &[u8],
         block_offsets: &[u64],
-    ) -> Result<Vec<T>, FreezerError> {
-        let mut block_objects: Vec<T> = Vec::new();
+        block_data: &[u8],
+    ) -> Result<String, FreezerError> {
+        let offset_offset = block_offsets.first().ok_or(FreezerError::BlockOffset)?;
+        let mut block_objects = String::from("[\n");
         let decompressor = |input: &[u8]| -> Result<Vec<u8>, FreezerError> {
             if self.is_compressed() {
                 trace!("Decompressing...");
@@ -165,9 +166,13 @@ impl Freezer {
             T::deserialize(&mut deserializer).map_err(FreezerError::RlpDeserialization)
         };
         for offsets in block_offsets.windows(2) {
-            let blob = decompressor(&block_data[offsets[0] as usize..offsets[1] as usize])?;
-            block_objects.push(rlp_deserialize(&blob)?)
+            let blob = decompressor(
+                &block_data
+                    [(offsets[0] - offset_offset) as usize..(offsets[1] - offset_offset) as usize],
+            )?;
+            block_objects.push_str(&(rlp_deserialize(&blob)?.to_string() + ",\n"));
         }
+        block_objects.push_str("\n]");
         Ok(block_objects)
     }
 
