@@ -40,13 +40,13 @@ fn main() {
     let block_numbers = block_numbers.unwrap();
 
     // Build index
-    let schedule = block_part
+    let index = block_part
         .init(ancient_folder, block_numbers.0, block_numbers.1)
         .expect("Failed to build index");
 
     // Load all data files into RAM
     let _ = write_target.write_all(b"[\n");
-    for job in schedule.offsets {
+    for job in index.offsets {
         let data = block_part
             .load_data(ancient_folder, job.0, &job.1)
             .expect("Unable to load data files");
