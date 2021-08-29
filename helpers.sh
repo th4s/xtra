@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Mount chaindata: sshfs giga:/var/lib/geth/geth/chaindata/ancient /home/thojest/chaindata_ancient/ -o reconnect,ro
+# Mount chaindata: sshfs giga:/var/lib/geth/geth/chaindata/ancient /home/th4s/chaindata_ancient/ -o reconnect,ro
 
 # Reads the file number for block number X from an index file
 # e.g rif ~/chaindata_ancient/headers.cidx 1

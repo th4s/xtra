@@ -22,7 +22,7 @@ pub(crate) fn usize_from_bytes_be_padded(input: &[u8]) -> Result<usize, NumericE
     let input = match input_len {
         len @ 0..=SIZE_OF_USIZE => {
             let mut padded = [0_u8; SIZE_OF_USIZE];
-            padded[SIZE_OF_USIZE - len..].copy_from_slice(&input);
+            padded[SIZE_OF_USIZE - len..].copy_from_slice(input);
             padded
         }
         _ => <[u8; SIZE_OF_USIZE]>::try_from(&input[..SIZE_OF_USIZE])
@@ -39,7 +39,7 @@ pub(crate) fn u32_from_bytes_end_be_padded(input: &[u8]) -> Result<u32, NumericE
     let input = match input_len {
         len @ 0..=4 => {
             let mut padded = [0_u8; 4];
-            padded[4 - len..].copy_from_slice(&input);
+            padded[4 - len..].copy_from_slice(input);
             padded
         }
         _ => <[u8; 4]>::try_from(&input[input_len - 4..]).map_err(NumericError::Conversion)?,
@@ -55,7 +55,7 @@ pub(crate) fn u64_from_bytes_end_be_padded(input: &[u8]) -> Result<u64, NumericE
     let input = match input_len {
         len @ 0..=8 => {
             let mut padded = [0_u8; 8];
-            padded[8 - len..].copy_from_slice(&input);
+            padded[8 - len..].copy_from_slice(input);
             padded
         }
         _ => <[u8; 8]>::try_from(&input[input_len - 8..]).map_err(NumericError::Conversion)?,

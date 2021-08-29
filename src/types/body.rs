@@ -20,6 +20,7 @@ impl std::fmt::Display for BlockBody {
     }
 }
 
+/// The transaction object
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Transaction {
     #[serde(serialize_with = "crate::types::str_serialize")]
