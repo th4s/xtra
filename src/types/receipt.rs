@@ -65,7 +65,7 @@ impl std::fmt::Display for PostState {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 struct Log {
     address: ByteArray<20>,
-    topics: Topics,
+    topics: NiceVec<Topics>,
     data: ByteVec,
 }
 
@@ -80,6 +80,7 @@ impl std::fmt::Display for Log {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(transparent)]
 struct Topics(ByteArray<32>);
 
 impl std::fmt::Display for Topics {
